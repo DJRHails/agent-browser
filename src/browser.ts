@@ -47,6 +47,44 @@ export function getDefaultTimeout(): number {
   return 25000;
 }
 
+/**
+ * Map DOM KeyboardEvent.code to Windows virtual key code for CDP.
+ * Covers printable keys (letters, digits, punctuation) and common
+ * non-printable keys (navigation, editing, modifiers, function keys).
+ */
+const CODE_TO_VK: Record<string, number> = {
+  // Editing & whitespace
+  Backspace: 8, Tab: 9, Enter: 13, NumpadEnter: 13,
+  Escape: 27, Space: 32, Delete: 46,
+  // Navigation
+  ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
+  Home: 36, End: 35, PageUp: 33, PageDown: 34,
+  Insert: 45,
+  // Modifiers
+  ShiftLeft: 16, ShiftRight: 16,
+  ControlLeft: 17, ControlRight: 17,
+  AltLeft: 18, AltRight: 18,
+  MetaLeft: 91, MetaRight: 93,
+  CapsLock: 20, NumLock: 144, ScrollLock: 145,
+  // Function keys
+  F1: 112, F2: 113, F3: 114, F4: 115, F5: 116, F6: 117,
+  F7: 118, F8: 119, F9: 120, F10: 121, F11: 122, F12: 123,
+  // Punctuation & symbols
+  Minus: 189, Equal: 187,
+  BracketLeft: 219, BracketRight: 221, Backslash: 220,
+  Semicolon: 186, Quote: 222,
+  Comma: 188, Period: 190, Slash: 191,
+  Backquote: 192,
+};
+
+// Letters: KeyA(65)..KeyZ(90), Digits: Digit0(48)..Digit9(57)
+for (let i = 0; i < 26; i++) CODE_TO_VK[`Key${String.fromCharCode(65 + i)}`] = 65 + i;
+for (let i = 0; i < 10; i++) CODE_TO_VK[`Digit${i}`] = 48 + i;
+
+function codeToVirtualKeyCode(code?: string): number {
+  return code ? (CODE_TO_VK[code] ?? 0) : 0;
+}
+
 // Screencast frame data from CDP
 export interface ScreencastFrame {
   data: string; // base64 encoded image
@@ -2213,6 +2251,7 @@ export class BrowserManager {
       key: params.key,
       code: params.code,
       text: params.text,
+      windowsVirtualKeyCode: codeToVirtualKeyCode(params.code),
       modifiers: params.modifiers ?? 0,
     });
   }
