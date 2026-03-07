@@ -1,5 +1,22 @@
 # agent-browser
 
+> **Fork note — patch-stack workflow:**
+> This is a patch-stack fork of [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser), managed by [DJRHails/patch-stack-action](https://github.com/DJRHails/patch-stack-action).
+>
+> **How it works:**
+> - The `upstream` branch mirrors upstream `main` nightly (4 AM UTC via [patch-stack-sync](.github/workflows/patch-stack-sync.yml)).
+> - Each `patch/*` branch holds a single logical change rebased automatically onto `upstream`.
+> - The fork's `main` integrates all patches via squash-merge PRs (commits prefixed `patch-stack:`).
+> - Merge conflicts during rebase are resolved automatically using Claude Code.
+>
+> **Adding a new patch:**
+> 1. Create a branch: `git checkout -b patch/my-feature origin/upstream`
+> 2. Make your changes and push: `git push origin patch/my-feature`
+> 3. Create a local PR: `gh pr create --head patch/my-feature --base upstream`
+> 4. The nightly sync will rebase it onto upstream and squash-merge it into `main`.
+>
+> **Current patches:** _(none yet)_
+
 Headless browser automation CLI for AI agents. Fast Rust CLI with Node.js fallback.
 
 ## Installation

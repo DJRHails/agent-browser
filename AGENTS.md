@@ -2,6 +2,58 @@
 
 Instructions for AI coding agents working with this codebase.
 
+## Patch-Stack Fork Workflow
+
+This repository is maintained as a patch-stack fork of `vercel-labs/agent-browser`.
+
+| Branch | Purpose |
+| --- | --- |
+| `upstream` | Mirror of upstream `main`, refreshed nightly by the patch-stack workflow |
+| `patch/*` | One branch per logical change, rebased automatically onto `upstream` |
+| `main` | Fork integration branch containing the current upstream mirror plus all active patches |
+
+### Nightly Sync
+
+The scheduled patch-stack workflow runs nightly at 4 AM UTC and can also be triggered manually. Each run:
+
+1. Mirrors upstream `main` into the fork's `upstream` branch
+2. Rebases each open `patch/*` PR branch onto `upstream`
+3. Rebuilds the fork's `main` by squash-merging the active patch PRs
+4. Cleans up obsolete patch integration state as patches are removed or reordered
+
+### Creating a New Patch
+
+1. Create a patch branch from the upstream mirror: `git checkout -b patch/my-feature origin/upstream`
+2. Make and push your change: `git push origin patch/my-feature`
+3. Open a local PR from `patch/my-feature` to `upstream`: `gh pr create --head patch/my-feature --base upstream`
+4. Let the nightly sync rebase and integrate it into `main`
+
+### Patch Dependencies
+
+When one patch depends on another, encode the order in the branch name with `--` separators. Example: `patch/base-change--follow-up` means the follow-up patch depends on `patch/base-change`.
+
+### Current Patches
+
+None yet.
+
+### Commit Convention
+
+Patch integration commits on `main` use this format: `patch-stack: <desc> (#PR)`.
+
+### Required Secrets
+
+| Secret | Purpose |
+| --- | --- |
+| `PATCH_STACK_APP_ID` | GitHub App ID used by the patch-stack workflow |
+| `PATCH_STACK_APP_PRIVATE_KEY` | GitHub App private key used for repo and PR mutations |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code token used for automated conflict resolution |
+
+### Guidelines
+
+- Do not manually merge `patch/*` branches into `main`
+- Do not manually rebase `main`
+- Fork-specific infrastructure changes may go directly onto `main`
+
 ## Package Manager
 
 This project uses **pnpm**. Always use `pnpm` instead of `npm` or `yarn` for installing dependencies, running scripts, etc. (e.g., `pnpm install`, `pnpm run build`).
