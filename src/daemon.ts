@@ -359,11 +359,27 @@ export async function startDaemon(options?: {
 
   if (streamPort > 0 && !isIOS && manager instanceof BrowserManager) {
     streamServer = new StreamServer(manager, streamPort);
-    await streamServer.start();
+    try {
+      await streamServer.start();
 
-    // Write stream port to file for clients to discover
-    const streamPortFile = getStreamPortFile();
-    fs.writeFileSync(streamPortFile, streamPort.toString());
+      // Write stream port to file for clients to discover
+      const streamPortFile = getStreamPortFile();
+      fs.writeFileSync(streamPortFile, streamPort.toString());
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EADDRINUSE') {
+        console.warn(
+          `[warn] Stream port ${streamPort} already in use. ` +
+            'Continuing without stream server. ' +
+            'Use a different AGENT_BROWSER_STREAM_PORT for each --session.'
+        );
+      } else {
+        console.warn(
+          `[warn] Stream server failed to start: ${err}. ` + 'Continuing without stream server.'
+        );
+      }
+      streamServer = null;
+    }
   }
 
   const server = net.createServer((socket) => {
@@ -509,6 +525,30 @@ export async function startDaemon(options?: {
             }
           }
 
+          const shouldRouteToTab =
+            manager instanceof BrowserManager &&
+            parseResult.command.tabId !== undefined &&
+            ![
+              'launch',
+              'close',
+              'state_load',
+              'tab_list',
+              'tab_switch',
+              'tab_close',
+              'tab_new',
+              'window_new',
+            ].includes(parseResult.command.action);
+
+          let restoreTabId: number | undefined;
+          if (shouldRouteToTab && manager instanceof BrowserManager) {
+            const targetTabId = parseResult.command.tabId;
+            const previousTabId = manager.getActivePageId();
+            if (targetTabId !== undefined && previousTabId !== targetTabId) {
+              await manager.switchTo(targetTabId);
+              restoreTabId = previousTabId;
+            }
+          }
+
           // Handle close command specially - shuts down daemon
           if (parseResult.command.action === 'close') {
             // Auto-save state before closing
@@ -552,10 +592,17 @@ export async function startDaemon(options?: {
           }
 
           // Execute command with appropriate handler
-          const response =
-            isIOS && manager instanceof IOSManager
-              ? await executeIOSCommand(parseResult.command, manager)
-              : await executeCommand(parseResult.command, manager as BrowserManager);
+          let response;
+          try {
+            response =
+              isIOS && manager instanceof IOSManager
+                ? await executeIOSCommand(parseResult.command, manager)
+                : await executeCommand(parseResult.command, manager as BrowserManager);
+          } finally {
+            if (restoreTabId !== undefined && manager instanceof BrowserManager) {
+              await manager.switchTo(restoreTabId).catch(() => {});
+            }
+          }
 
           // Add any launch warnings to the response
           if (manager instanceof BrowserManager) {
