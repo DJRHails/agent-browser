@@ -235,11 +235,20 @@ agent-browser network requests --filter api    # Filter requests
 ### Tabs & Windows
 
 ```bash
-agent-browser tab                     # List tabs
-agent-browser tab new [url]           # New tab (optionally with URL)
-agent-browser tab <n>                 # Switch to tab n
-agent-browser tab close [n]           # Close tab
+agent-browser tab                     # List tabs with tab IDs
+agent-browser tab new [url]           # New tab and print its tab ID
+agent-browser tab <id>                # Switch to tab by tab ID
+agent-browser tab close [id]          # Close tab by tab ID
 agent-browser window new              # New window
+```
+
+Tab IDs are stable for the lifetime of the daemon. Closing tab `2` does not renumber the remaining tabs.
+
+Use `--tab <id>` to target a tab directly for page-scoped commands:
+
+```bash
+agent-browser --tab 4 snapshot
+agent-browser --tab 4 click @e3
 ```
 
 ### Frames
@@ -467,6 +476,7 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | Option | Description |
 |--------|-------------|
 | `--session <name>` | Use isolated session (or `AGENT_BROWSER_SESSION` env) |
+| `--tab <id>` | Target a specific tab ID for page-scoped commands |
 | `--session-name <name>` | Auto-save/restore session state (or `AGENT_BROWSER_SESSION_NAME` env) |
 | `--profile <path>` | Persistent browser profile directory (or `AGENT_BROWSER_PROFILE` env) |
 | `--state <path>` | Load storage state from JSON file (or `AGENT_BROWSER_STATE` env) |

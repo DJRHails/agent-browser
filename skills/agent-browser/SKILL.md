@@ -73,6 +73,14 @@ agent-browser scroll down 500 --selector "div.content"  # Scroll within a specif
 agent-browser get text @e1            # Get element text
 agent-browser get url                 # Get current URL
 agent-browser get title               # Get page title
+agent-browser tab                     # List tabs with tab IDs
+agent-browser tab new                 # Open a new tab and print its tab ID
+agent-browser tab 2                   # Switch to tab by tab ID
+
+# Tab IDs stay stable for the lifetime of the daemon. Closing tab 2 does not renumber the rest.
+
+# Use --tab <id> to target a tab directly for page-scoped commands.
+# Example: agent-browser --tab 4 snapshot
 
 # Wait
 agent-browser wait @e1                # Wait for element
