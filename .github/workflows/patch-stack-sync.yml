@@ -14,15 +14,13 @@ jobs:
   sync:
     uses: DJRHails/patch-stack-action/.github/workflows/patch-stack-sync.yml@main
     with:
-      upstream_repo: vercel-labs/agent-browser # ← change per repo
+      upstream_repo: vercel-labs/agent-browser
       upstream_branch: main
-      fork_repo: DJRHails/agent-browser # ← change per repo
+      fork_repo: DJRHails/agent-browser
       fork_main: main
       fork_upstream_branch: upstream
       dry_run: ${{ inputs.dry_run || false }}
     secrets:
       app_id: ${{ secrets.PATCH_STACK_APP_ID }}
       app_private_key: ${{ secrets.PATCH_STACK_APP_PRIVATE_KEY }}
-      # Generate this token locally with: claude setup-token
-      # Then add as a repo secret named CLAUDE_CODE_OAUTH_TOKEN
       claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
