@@ -17,7 +17,7 @@
  *   agent-browser click @e2             # Click element by ref
  */
 
-import type { Page, Locator } from 'playwright-core';
+import type { Page, Frame, Locator } from 'playwright-core';
 
 export interface RefMap {
   [ref: string]: {
@@ -26,6 +26,8 @@ export interface RefMap {
     name: string;
     /** Index for disambiguation when multiple elements have same role+name */
     nth?: number;
+    /** Frame URL for elements inside iframes (undefined = main frame) */
+    frameUrl?: string;
   };
 }
 
@@ -261,7 +263,47 @@ async function findCursorInteractiveElements(
 }
 
 /**
- * Get enhanced snapshot with refs and optional filtering
+ * Get the ARIA snapshot for a single frame, returning empty string on error
+ * (e.g. cross-origin frames that block accessibility queries).
+ */
+async function safeAriaSnapshot(frame: Frame, selector?: string): Promise<string> {
+  try {
+    const locator = selector ? frame.locator(selector) : frame.locator(':root');
+    return (await locator.ariaSnapshot()) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Build a human-readable label for a frame (used in snapshot output).
+ */
+function frameLabel(frame: Frame): string {
+  const name = frame.name();
+  const url = frame.url();
+  const parts: string[] = [];
+  if (name) parts.push(`name="${name}"`);
+  if (url && url !== 'about:blank') parts.push(`url="${url}"`);
+  return parts.length > 0 ? `iframe [${parts.join(' ')}]` : 'iframe';
+}
+
+/**
+ * Indent every line in a string by a given number of spaces.
+ */
+function indentBlock(text: string, spaces: number): string {
+  const pad = ' '.repeat(spaces);
+  return text
+    .split('\n')
+    .map((line) => pad + line)
+    .join('\n');
+}
+
+/**
+ * Get enhanced snapshot with refs and optional filtering.
+ *
+ * Traverses all iframes on the page and includes their content in the
+ * snapshot tree. Refs inside iframes store a `frameUrl` so that
+ * `getLocatorFromRef()` can resolve them against the correct frame.
  */
 export async function getEnhancedSnapshot(
   page: Page,
@@ -270,19 +312,36 @@ export async function getEnhancedSnapshot(
   resetRefs();
   const refs: RefMap = {};
 
-  // Get ARIA snapshot from Playwright
-  const locator = options.selector ? page.locator(options.selector) : page.locator(':root');
-  const ariaTree = await locator.ariaSnapshot();
+  // Snapshot the main frame
+  const ariaTree = await safeAriaSnapshot(page.mainFrame(), options.selector);
 
   if (!ariaTree) {
-    return {
-      tree: '(empty)',
-      refs: {},
-    };
+    return { tree: '(empty)', refs: {} };
   }
 
-  // Parse and enhance the ARIA tree
-  const enhancedTree = processAriaTree(ariaTree, refs, options);
+  // Parse and enhance the main frame ARIA tree
+  let enhancedTree = processAriaTree(ariaTree, refs, options);
+
+  // Traverse child frames (iframes)
+  const childFrames = page.mainFrame().childFrames();
+  for (const frame of childFrames) {
+    const frameTree = await safeAriaSnapshot(frame);
+    if (!frameTree) continue;
+
+    const frameRefs: RefMap = {};
+    const enhanced = processAriaTree(frameTree, frameRefs, options);
+    if (!enhanced) continue;
+
+    // Tag all refs from this frame with its URL
+    const url = frame.url();
+    for (const [ref, data] of Object.entries(frameRefs)) {
+      refs[ref] = { ...data, frameUrl: url };
+    }
+
+    // Append frame content indented under a frame label
+    const label = frameLabel(frame);
+    enhancedTree += `\n  - ${label}:\n${indentBlock(enhanced, 4)}`;
+  }
 
   // When cursor flag is set, also find cursor-interactive elements
   // that may not have proper ARIA roles
