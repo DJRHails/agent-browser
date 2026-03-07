@@ -61,4 +61,31 @@ describe('isAllowedOrigin', () => {
       expect(isAllowedOrigin('://missing-scheme')).toBe(false);
     });
   });
+
+  describe('AGENT_BROWSER_STREAM_ALLOWED_ORIGINS', () => {
+    it('should allow all origins when set to *', () => {
+      expect(isAllowedOrigin('https://evil.com', '*')).toBe(true);
+      expect(isAllowedOrigin('http://anything.example.org', '*')).toBe(true);
+    });
+
+    it('should allow origins matching comma-separated patterns', () => {
+      const allowed = 'saint.work,example.com';
+      expect(isAllowedOrigin('https://the-church-stream.saint.work', allowed)).toBe(true);
+      expect(isAllowedOrigin('https://example.com', allowed)).toBe(true);
+      expect(isAllowedOrigin('https://evil.com', allowed)).toBe(false);
+    });
+
+    it('should trim whitespace from patterns', () => {
+      const allowed = ' saint.work , example.com ';
+      expect(isAllowedOrigin('https://x.saint.work', allowed)).toBe(true);
+    });
+
+    it('should still allow localhost when allowlist is set', () => {
+      expect(isAllowedOrigin('http://localhost:3000', 'saint.work')).toBe(true);
+    });
+
+    it('should skip empty patterns from trailing commas', () => {
+      expect(isAllowedOrigin('https://evil.com', 'saint.work,')).toBe(false);
+    });
+  });
 });
