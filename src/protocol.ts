@@ -5,6 +5,7 @@ import type { Command, Response } from './types.js';
 const baseCommandSchema = z.object({
   id: z.string(),
   action: z.string(),
+  tabId: z.number().nonnegative().optional(),
 });
 
 // Individual action schemas
@@ -858,12 +859,12 @@ const tabListSchema = baseCommandSchema.extend({
 
 const tabSwitchSchema = baseCommandSchema.extend({
   action: z.literal('tab_switch'),
-  index: z.number().nonnegative(),
+  tabId: z.number().nonnegative(),
 });
 
 const tabCloseSchema = baseCommandSchema.extend({
   action: z.literal('tab_close'),
-  index: z.number().nonnegative().optional(),
+  tabId: z.number().nonnegative().optional(),
 });
 
 const windowNewSchema = baseCommandSchema.extend({

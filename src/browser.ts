@@ -144,6 +144,8 @@ export class BrowserManager {
   private contexts: BrowserContext[] = [];
   private pages: Page[] = [];
   private activePageIndex: number = 0;
+  private pageIds: Map<Page, number> = new Map();
+  private nextPageId: number = 0;
   private activeFrame: Frame | null = null;
   private dialogHandler: ((dialog: Dialog) => Promise<void>) | null = null;
   private trackedRequests: TrackedRequest[] = [];
@@ -370,6 +372,50 @@ export class BrowserManager {
   }
 
   /**
+   * Get or assign a stable tab ID for a page.
+   * IDs are monotonically increasing and never reused within a daemon lifetime.
+   */
+  private getOrAssignPageId(page: Page): number {
+    const existing = this.pageIds.get(page);
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    const id = this.nextPageId++;
+    this.pageIds.set(page, id);
+    return id;
+  }
+
+  /**
+   * Register a page with stable ID tracking and standard event handlers.
+   */
+  private registerPage(page: Page): number {
+    const id = this.getOrAssignPageId(page);
+    if (!this.pages.includes(page)) {
+      this.pages.push(page);
+      this.setupPageTracking(page);
+    }
+    return id;
+  }
+
+  /**
+   * Resolve a stable tab ID to the current page index.
+   */
+  private getPageIndexById(tabId: number): number {
+    const index = this.pages.findIndex((page) => this.pageIds.get(page) === tabId);
+    if (index === -1) {
+      const available = this.pages
+        .map((page) => this.pageIds.get(page))
+        .filter((id): id is number => id !== undefined)
+        .join(', ');
+      throw new Error(
+        `Invalid tab ID: ${tabId}.${available ? ` Available tab IDs: ${available}` : ''}`
+      );
+    }
+    return index;
+  }
+
+  /**
    * Ensure at least one page exists. If the browser is launched but all pages
    * were closed (stale session), creates a new page on the existing context.
    * No-op if pages already exist.
@@ -395,10 +441,7 @@ export class BrowserManager {
     }
 
     const page = await context.newPage();
-    if (!this.pages.includes(page)) {
-      this.pages.push(page);
-      this.setupPageTracking(page);
-    }
+    this.registerPage(page);
     this.activePageIndex = this.pages.length - 1;
   }
 
@@ -875,6 +918,13 @@ export class BrowserManager {
   }
 
   /**
+   * Get the stable tab ID for the current active page.
+   */
+  getActivePageId(): number {
+    return this.getOrAssignPageId(this.getPage());
+  }
+
+  /**
    * Get the current browser instance
    */
   getBrowser(): Browser | null {
@@ -1005,9 +1055,8 @@ export class BrowserManager {
       this.setupContextTracking(context);
       await this.ensureDomainFilter(context);
       await this.sanitizeExistingPages([page]);
-      this.pages.push(page);
+      this.registerPage(page);
       this.activePageIndex = 0;
-      this.setupPageTracking(page);
     } catch (error) {
       await this.closeBrowserbaseSession(session.id, browserbaseApiKey).catch((sessionError) => {
         console.error('Failed to close Browserbase session during cleanup:', sessionError);
@@ -1148,9 +1197,8 @@ export class BrowserManager {
       this.setupContextTracking(context);
       await this.ensureDomainFilter(context);
       await this.sanitizeExistingPages([page]);
-      this.pages.push(page);
+      this.registerPage(page);
       this.activePageIndex = 0;
-      this.setupPageTracking(page);
     } catch (error) {
       await this.closeKernelSession(session.session_id, kernelApiKey).catch((sessionError) => {
         console.error('Failed to close Kernel session during cleanup:', sessionError);
@@ -1223,9 +1271,8 @@ export class BrowserManager {
       this.setupContextTracking(context);
       await this.ensureDomainFilter(context);
       await this.sanitizeExistingPages([page]);
-      this.pages.push(page);
+      this.registerPage(page);
       this.activePageIndex = 0;
-      this.setupPageTracking(page);
     } catch (error) {
       await this.closeBrowserUseSession(session.id, browserUseApiKey).catch((sessionError) => {
         console.error('Failed to close Browser Use session during cleanup:', sessionError);
@@ -1528,11 +1575,7 @@ export class BrowserManager {
 
     const page = context.pages()[0] ?? (await context.newPage());
     await this.sanitizeExistingPages([page]);
-    // Only add if not already tracked (setupContextTracking may have already added it via 'page' event)
-    if (!this.pages.includes(page)) {
-      this.pages.push(page);
-      this.setupPageTracking(page);
-    }
+    this.registerPage(page);
     this.activePageIndex = this.pages.length > 0 ? this.pages.length - 1 : 0;
   }
 
@@ -1607,8 +1650,7 @@ export class BrowserManager {
       await this.sanitizeExistingPages(allPages);
 
       for (const page of allPages) {
-        this.pages.push(page);
-        this.setupPageTracking(page);
+        this.registerPage(page);
       }
 
       this.activePageIndex = 0;
@@ -1785,11 +1827,14 @@ export class BrowserManager {
     });
 
     page.on('close', () => {
+      this.pageIds.delete(page);
       const index = this.pages.indexOf(page);
       if (index !== -1) {
         this.pages.splice(index, 1);
         if (this.activePageIndex >= this.pages.length) {
           this.activePageIndex = Math.max(0, this.pages.length - 1);
+        } else if (this.activePageIndex > index) {
+          this.activePageIndex--;
         }
       }
     });
@@ -1801,11 +1846,7 @@ export class BrowserManager {
    */
   private setupContextTracking(context: BrowserContext): void {
     context.on('page', (page) => {
-      // Only add if not already tracked (avoids duplicates when newTab() creates pages)
-      if (!this.pages.includes(page)) {
-        this.pages.push(page);
-        this.setupPageTracking(page);
-      }
+      this.registerPage(page);
 
       // Auto-switch to the newly opened tab so subsequent commands target it.
       // For tabs created via newTab()/newWindow(), this is redundant (they set activePageIndex after),
@@ -1821,9 +1862,10 @@ export class BrowserManager {
   }
 
   /**
-   * Create a new tab in the current context
+   * Create a new tab in the current context.
+   * Returns the stable tab ID alongside the current display order.
    */
-  async newTab(): Promise<{ index: number; total: number }> {
+  async newTab(): Promise<{ tabId: number; total: number }> {
     if (!this.browser || this.contexts.length === 0) {
       throw new Error('Browser not launched');
     }
@@ -1833,21 +1875,17 @@ export class BrowserManager {
 
     const context = this.contexts[0]; // Use first context for tabs
     const page = await context.newPage();
-    // Only add if not already tracked (setupContextTracking may have already added it via 'page' event)
-    if (!this.pages.includes(page)) {
-      this.pages.push(page);
-      this.setupPageTracking(page);
-    }
+    const id = this.registerPage(page);
     this.activePageIndex = this.pages.length - 1;
 
-    return { index: this.activePageIndex, total: this.pages.length };
+    return { tabId: id, total: this.pages.length };
   }
 
   /**
    * Create a new window (new context)
    */
   async newWindow(viewport?: { width: number; height: number } | null): Promise<{
-    index: number;
+    tabId: number;
     total: number;
   }> {
     if (!this.browser) {
@@ -1864,14 +1902,10 @@ export class BrowserManager {
     await this.ensureDomainFilter(context);
 
     const page = await context.newPage();
-    // Only add if not already tracked (setupContextTracking may have already added it via 'page' event)
-    if (!this.pages.includes(page)) {
-      this.pages.push(page);
-      this.setupPageTracking(page);
-    }
+    const id = this.registerPage(page);
     this.activePageIndex = this.pages.length - 1;
 
-    return { index: this.activePageIndex, total: this.pages.length };
+    return { tabId: id, total: this.pages.length };
   }
 
   /**
@@ -1892,12 +1926,10 @@ export class BrowserManager {
   }
 
   /**
-   * Switch to a specific tab/page by index
+   * Switch to a specific tab/page by stable tab ID.
    */
-  async switchTo(index: number): Promise<{ index: number; url: string; title: string }> {
-    if (index < 0 || index >= this.pages.length) {
-      throw new Error(`Invalid tab index: ${index}. Available: 0-${this.pages.length - 1}`);
-    }
+  async switchTo(tabId: number): Promise<{ tabId: number; url: string; title: string }> {
+    const index = this.getPageIndexById(tabId);
 
     // Invalidate CDP session before switching (it's page-specific)
     if (index !== this.activePageIndex) {
@@ -1908,21 +1940,17 @@ export class BrowserManager {
     const page = this.pages[index];
 
     return {
-      index: this.activePageIndex,
+      tabId: this.getOrAssignPageId(page),
       url: page.url(),
       title: '', // Title requires async, will be fetched separately
     };
   }
 
   /**
-   * Close a specific tab/page
+   * Close a specific tab/page by stable tab ID.
    */
-  async closeTab(index?: number): Promise<{ closed: number; remaining: number }> {
-    const targetIndex = index ?? this.activePageIndex;
-
-    if (targetIndex < 0 || targetIndex >= this.pages.length) {
-      throw new Error(`Invalid tab index: ${targetIndex}`);
-    }
+  async closeTab(tabId?: number): Promise<{ tabId: number; remaining: number }> {
+    const targetIndex = tabId === undefined ? this.activePageIndex : this.getPageIndexById(tabId);
 
     if (this.pages.length === 1) {
       throw new Error('Cannot close the last tab. Use "close" to close the browser.');
@@ -1934,8 +1962,8 @@ export class BrowserManager {
     }
 
     const page = this.pages[targetIndex];
+    const closedId = this.getOrAssignPageId(page);
     await page.close();
-    this.pages.splice(targetIndex, 1);
 
     // Adjust active index if needed
     if (this.activePageIndex >= this.pages.length) {
@@ -1944,15 +1972,18 @@ export class BrowserManager {
       this.activePageIndex--;
     }
 
-    return { closed: targetIndex, remaining: this.pages.length };
+    return { tabId: closedId, remaining: this.pages.length };
   }
 
   /**
    * List all tabs with their info
    */
-  async listTabs(): Promise<Array<{ index: number; url: string; title: string; active: boolean }>> {
+  async listTabs(): Promise<
+    Array<{ tabId: number; index: number; url: string; title: string; active: boolean }>
+  > {
     const tabs = await Promise.all(
       this.pages.map(async (page, index) => ({
+        tabId: this.getOrAssignPageId(page),
         index,
         url: page.url(),
         title: await page.title().catch(() => ''),
@@ -2390,11 +2421,8 @@ export class BrowserManager {
 
     // Add the recording context and page to our managed lists
     this.contexts.push(this.recordingContext);
-    this.pages.push(this.recordingPage);
+    this.registerPage(this.recordingPage);
     this.activePageIndex = this.pages.length - 1;
-
-    // Set up page tracking
-    this.setupPageTracking(this.recordingPage);
 
     // Invalidate CDP session since we switched pages
     await this.invalidateCDPSession();
@@ -2589,6 +2617,8 @@ export class BrowserManager {
 
     this.pages = [];
     this.contexts = [];
+    this.pageIds.clear();
+    this.nextPageId = 0;
     this.cdpEndpoint = null;
     this.browserbaseSessionId = null;
     this.browserbaseApiKey = null;

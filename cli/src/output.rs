@@ -251,7 +251,11 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         // Tabs
         if let Some(tabs) = data.get("tabs").and_then(|v| v.as_array()) {
-            for (i, tab) in tabs.iter().enumerate() {
+            for tab in tabs {
+                let tab_id = tab
+                    .get("tabId")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or_default();
                 let title = tab
                     .get("title")
                     .and_then(|v| v.as_str())
@@ -263,9 +267,26 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
                 } else {
                     " ".to_string()
                 };
-                println!("{} [{}] {} - {}", marker, i, title, url);
+                println!("{} [{}] {} - {}", marker, tab_id, title, url);
             }
             return;
+        }
+        // New tab/window
+        if let Some(tab_id) = data.get("tabId").and_then(|v| v.as_i64()) {
+            if let Some(total) = data.get("total").and_then(|v| v.as_i64()) {
+                let label = match action {
+                    Some("window_new") => "Window opened",
+                    _ => "Tab opened",
+                };
+                println!(
+                    "{} {} [{}] ({} total)",
+                    color::success_indicator(),
+                    label,
+                    tab_id,
+                    total
+                );
+                return;
+            }
         }
         // Console logs
         if let Some(logs) = data.get("messages").and_then(|v| v.as_array()) {
@@ -396,9 +417,15 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
             return;
         }
         // Closed (browser or tab)
-        if data.get("closed").is_some() {
+        if data.get("closed").is_some() || data.get("tabId").is_some() {
             let label = match action {
-                Some("tab_close") => "Tab closed",
+                Some("tab_close") => {
+                    if let Some(closed_id) = data.get("tabId").and_then(|v| v.as_i64()) {
+                        println!("{} Tab [{}] closed", color::success_indicator(), closed_id);
+                        return;
+                    }
+                    "Tab closed"
+                }
                 _ => "Browser closed",
             };
             println!("{} {}", color::success_indicator(), label);
@@ -832,6 +859,7 @@ Aliases: goto, navigate
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
   --headers <json>     Set HTTP headers (scoped to this origin)
   --headed             Show browser window
 
@@ -855,6 +883,7 @@ the browser's back button.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser back
@@ -872,6 +901,7 @@ the browser's forward button.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser forward
@@ -889,6 +919,7 @@ the browser's reload button.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser reload
@@ -912,6 +943,7 @@ Options:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser click "#submit-button"
@@ -933,6 +965,7 @@ or triggering double-click handlers.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser dblclick "#editable-text"
@@ -951,6 +984,7 @@ This replaces any existing content in the field.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser fill "#email" "user@example.com"
@@ -970,6 +1004,7 @@ Unlike fill, this does not clear existing content first.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser type "#search" "hello"
@@ -993,6 +1028,7 @@ triggering hover states or dropdown menus.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser hover "#dropdown-trigger"
@@ -1010,6 +1046,7 @@ Sets keyboard focus to the specified element.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser focus "#input-field"
@@ -1027,6 +1064,7 @@ Checks a checkbox element. If already checked, no action is taken.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser check "#terms-checkbox"
@@ -1044,6 +1082,7 @@ Unchecks a checkbox element. If already unchecked, no action is taken.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser uncheck "#newsletter-opt-in"
@@ -1061,6 +1100,7 @@ Selects one or more options in a <select> dropdown by value.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser select "#country" "US"
@@ -1079,6 +1119,7 @@ Drags an element from source to target location.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser drag "#draggable" "#drop-zone"
@@ -1096,6 +1137,7 @@ Uploads one or more files to a file input element.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser upload "#file-input" ./document.pdf
@@ -1117,6 +1159,7 @@ Arguments:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser download "#download-btn" ./file.pdf
@@ -1148,6 +1191,7 @@ Modifiers (combine with +):
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser press Enter
@@ -1169,6 +1213,7 @@ Useful for holding modifier keys.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser keydown Shift
@@ -1186,6 +1231,7 @@ Releases a key that was pressed with keydown.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser keyup Shift
@@ -1214,6 +1260,7 @@ directly — it already operates on the current focus.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser keyboard type "Hello, World!"
@@ -1248,6 +1295,7 @@ Options:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser scroll
@@ -1270,6 +1318,7 @@ Aliases: scrollinto
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser scrollintoview "#footer"
@@ -1301,6 +1350,7 @@ Download Options (with --download):
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser wait "#loading-spinner"
@@ -1334,6 +1384,7 @@ Options:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser screenshot
@@ -1355,6 +1406,7 @@ Saves the current page as a PDF file.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser pdf ./page.pdf
@@ -1383,6 +1435,7 @@ Options:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser snapshot
@@ -1409,6 +1462,7 @@ Options:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser eval "document.title"
@@ -1438,6 +1492,7 @@ Aliases: quit, exit
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser close
@@ -1468,6 +1523,7 @@ Subcommands:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser get text @e1
@@ -1500,6 +1556,7 @@ Subcommands:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser is visible "#modal"
@@ -1539,6 +1596,7 @@ Options:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser find role button click --name Submit
@@ -1569,6 +1627,7 @@ Subcommands:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser mouse move 100 200
@@ -1602,6 +1661,7 @@ Settings:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser set viewport 1920 1080
@@ -1636,6 +1696,7 @@ Subcommands:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser network route "**/api/*" --abort
@@ -1668,6 +1729,7 @@ Operations:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser storage local
@@ -1707,6 +1769,7 @@ for the current page URL.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   # Simple cookie for current page
@@ -1742,14 +1805,15 @@ Usage: agent-browser tab [operation] [args]
 Manage browser tabs in the current window.
 
 Operations:
-  list                 List all tabs (default)
-  new [url]            Open new tab
-  close [index]        Close tab (current if no index)
-  <index>              Switch to tab by index
+  list                 List all tabs with tab IDs (default)
+  new [url]            Open new tab and print its tab ID
+  close [tab-id]       Close tab by tab ID (current if omitted)
+  <tab-id>             Switch to tab by tab ID
 
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser tab
@@ -1758,7 +1822,7 @@ Examples:
   agent-browser tab new https://example.com
   agent-browser tab 2
   agent-browser tab close
-  agent-browser tab close 1
+  agent-browser tab close 2
 "##
         }
 
@@ -1777,6 +1841,7 @@ Operations:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser window new
@@ -1799,6 +1864,7 @@ Arguments:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser frame "#embed-iframe"
@@ -1833,6 +1899,7 @@ Save Options:
 Global Options:
   --json                   Output as JSON
   --session <name>         Use specific session
+  --tab <id>               Target specific tab ID
 
 Examples:
   echo "pass" | agent-browser auth save github --url https://github.com/login --username user --password-stdin
@@ -1881,6 +1948,7 @@ Operations:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser dialog accept
@@ -1905,6 +1973,7 @@ Operations:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser trace start
@@ -1936,6 +2005,7 @@ Start Options:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   # Basic profiling
@@ -1975,6 +2045,7 @@ Operations:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   # Record from current page (preserves login state)
@@ -2007,6 +2078,7 @@ Options:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser console
@@ -2027,6 +2099,7 @@ Options:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser errors
@@ -2046,6 +2119,7 @@ Visually highlights an element on the page for debugging.
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser highlight "#target-element"
@@ -2083,6 +2157,7 @@ State Encryption:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser state save ./auth-state.json
@@ -2115,6 +2190,7 @@ Environment:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser session
@@ -2163,6 +2239,7 @@ Supported URL formats:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   # Connect to local Chrome with remote debugging
@@ -2194,6 +2271,7 @@ for touch-based interfaces like iOS Safari.
 Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser tap "#submit-button"
@@ -2217,6 +2295,7 @@ Arguments:
 Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser -p ios swipe up
@@ -2236,6 +2315,7 @@ Subcommands:
 Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser device list
@@ -2291,6 +2371,7 @@ URL Diff:
 Global Options:
   --json               Output as JSON
   --session <name>     Use specific session
+  --tab <id>           Target specific tab ID
 
 Examples:
   agent-browser diff snapshot
@@ -2374,7 +2455,7 @@ Storage:
   storage <local|session>    Manage web storage
 
 Tabs:
-  tab [new|list|close|<n>]   Manage tabs
+  tab [new|list|close|<id>]  Manage tabs
 
 Diff:
   diff snapshot              Compare current vs last snapshot
@@ -2417,6 +2498,7 @@ Snapshot Options:
 
 Options:
   --session <name>           Isolated session (or AGENT_BROWSER_SESSION env)
+  --tab <id>                 Target a specific tab ID for page-scoped commands
   --profile <path>           Persistent browser profile (or AGENT_BROWSER_PROFILE env)
   --state <path>             Load storage state from JSON file (or AGENT_BROWSER_STATE env)
   --headers <json>           HTTP headers scoped to URL's origin (for auth)
