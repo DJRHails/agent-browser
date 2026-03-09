@@ -5,9 +5,11 @@ import { setScreencastFrameCallback } from './actions.js';
 /**
  * Check whether a WebSocket connection origin should be allowed.
  * Allows: no origin (CLI tools), file:// origins, and localhost/loopback origins.
+ * When AGENT_BROWSER_STREAM_ALLOWED_ORIGINS is set, those origins are also
+ * accepted ("*" allows all origins).
  * Rejects: all other origins (prevents malicious web pages from connecting).
  */
-export function isAllowedOrigin(origin: string | undefined): boolean {
+export function isAllowedOrigin(origin: string | undefined, allowedOrigins?: string): boolean {
   // Allow connections with no origin (non-browser clients like CLI tools)
   if (!origin) {
     return true;
@@ -16,6 +18,21 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
   if (origin.startsWith('file://')) {
     return true;
   }
+
+  // Check env-configured allowed origins
+  const envOrigins = allowedOrigins ?? process.env.AGENT_BROWSER_STREAM_ALLOWED_ORIGINS;
+  if (envOrigins === '*') {
+    return true;
+  }
+  if (envOrigins) {
+    for (const pattern of envOrigins.split(',')) {
+      const trimmed = pattern.trim();
+      if (trimmed && origin.includes(trimmed)) {
+        return true;
+      }
+    }
+  }
+
   // Allow localhost/loopback origins (browser-based stream viewers)
   try {
     const url = new URL(origin);
@@ -114,12 +131,15 @@ export class StreamServer {
   start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        // SECURITY: Bind to localhost only to prevent network exposure.
-        // The stream server allows direct input injection (mouse, keyboard, touch)
-        // which would be a critical security risk if exposed to the network.
+        // SECURITY: Bind to localhost by default to prevent network exposure.
+        // The stream server allows direct input injection (mouse, keyboard,
+        // touch) which would be a security risk if exposed to the network.
+        // Set AGENT_BROWSER_STREAM_HOST=0.0.0.0 to allow network access
+        // (e.g. when behind an authenticated reverse proxy).
+        const host = process.env.AGENT_BROWSER_STREAM_HOST || '127.0.0.1';
         this.wss = new WebSocketServer({
           port: this.port,
-          host: '127.0.0.1',
+          host,
           // Security: Reject cross-origin WebSocket connections from untrusted origins.
           // This prevents malicious web pages from connecting and injecting input events.
           // Localhost origins are allowed so browser-based stream viewers can connect.
@@ -146,7 +166,7 @@ export class StreamServer {
         });
 
         this.wss.on('listening', () => {
-          console.log(`[StreamServer] Listening on port ${this.port}`);
+          console.log(`[StreamServer] Listening on ${host}:${this.port}`);
 
           // Set up the screencast frame callback
           setScreencastFrameCallback((frame) => {
