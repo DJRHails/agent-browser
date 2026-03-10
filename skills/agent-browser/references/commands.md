@@ -165,12 +165,21 @@ agent-browser network requests --filter api    # Filter requests
 ## Tabs and Windows
 
 ```bash
-agent-browser tab                 # List tabs
-agent-browser tab new [url]       # New tab
-agent-browser tab 2               # Switch to tab by index
+agent-browser tab                 # List tabs with tab IDs
+agent-browser tab new [url]       # New tab and print its tab ID
+agent-browser tab 2               # Switch to tab by tab ID
 agent-browser tab close           # Close current tab
-agent-browser tab close 2         # Close tab by index
+agent-browser tab close 2         # Close tab by tab ID
 agent-browser window new          # New window
+```
+
+Tab IDs stay stable for the lifetime of the daemon. Closing tab `2` does not renumber the rest.
+
+Use `--tab <id>` to target a tab directly for page-scoped commands:
+
+```bash
+agent-browser --tab 4 snapshot
+agent-browser --tab 4 click @e3
 ```
 
 ## Frames
@@ -219,6 +228,7 @@ agent-browser state load auth.json    # Restore saved state
 
 ```bash
 agent-browser --session <name> ...    # Isolated browser session
+agent-browser --tab <id> ...          # Target a specific tab ID
 agent-browser --json ...              # JSON output for parsing
 agent-browser --headed ...            # Show browser window (not headless)
 agent-browser --full ...              # Full page screenshot (-f)
