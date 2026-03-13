@@ -245,15 +245,25 @@ export class BrowserManager {
 
     const page = this.getPage();
 
+    // Resolve the correct frame context for this ref.
+    // Refs from iframes store a frameUrl; resolve against that frame.
+    let context: Page | Frame = page;
+    if (refData.frameUrl) {
+      const frame = page.frame({ url: refData.frameUrl });
+      if (frame) {
+        context = frame;
+      }
+    }
+
     // Check if this is a cursor-interactive element (uses CSS selector, not ARIA role)
     // These have pseudo-roles 'clickable' or 'focusable' and a CSS selector
     if (refData.role === 'clickable' || refData.role === 'focusable') {
       // The selector is a CSS selector, use it directly
-      return page.locator(refData.selector);
+      return context.locator(refData.selector);
     }
 
     // Build locator with exact: true to avoid substring matches
-    let locator: Locator = page.getByRole(refData.role as any, {
+    let locator: Locator = context.getByRole(refData.role as any, {
       name: refData.name,
       exact: true,
     });
