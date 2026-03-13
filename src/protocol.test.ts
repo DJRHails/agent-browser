@@ -466,12 +466,17 @@ describe('parseCommand', () => {
     });
 
     it('should parse tab_switch', () => {
-      const result = parseCommand(cmd({ id: '1', action: 'tab_switch', index: 0 }));
+      const result = parseCommand(cmd({ id: '1', action: 'tab_switch', tabId: 0 }));
       expect(result.success).toBe(true);
     });
 
     it('should parse tab_close', () => {
       const result = parseCommand(cmd({ id: '1', action: 'tab_close' }));
+      expect(result.success).toBe(true);
+    });
+
+    it('should parse tab_close with tabId', () => {
+      const result = parseCommand(cmd({ id: '1', action: 'tab_close', tabId: 2 }));
       expect(result.success).toBe(true);
     });
   });
@@ -480,6 +485,14 @@ describe('parseCommand', () => {
     it('should parse basic snapshot command', () => {
       const result = parseCommand(cmd({ id: '1', action: 'snapshot' }));
       expect(result.success).toBe(true);
+    });
+
+    it('should parse snapshot with tabId', () => {
+      const result = parseCommand(cmd({ id: '1', action: 'snapshot', tabId: 4 }));
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect((result.command as { tabId?: number }).tabId).toBe(4);
+      }
     });
 
     it('should parse snapshot with interactive filter', () => {

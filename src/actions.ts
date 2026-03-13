@@ -1094,7 +1094,7 @@ async function handleTabList(
   const tabs = await browser.listTabs();
   return successResponse(command.id, {
     tabs,
-    active: browser.getActiveIndex(),
+    active: browser.getActivePageId(),
   });
 }
 
@@ -1102,7 +1102,7 @@ async function handleTabSwitch(
   command: TabSwitchCommand,
   browser: BrowserManager
 ): Promise<Response<TabSwitchData>> {
-  const result = await browser.switchTo(command.index);
+  const result = await browser.switchTo(command.tabId);
   const page = browser.getPage();
   return successResponse(command.id, {
     ...result,
@@ -1114,7 +1114,7 @@ async function handleTabClose(
   command: TabCloseCommand,
   browser: BrowserManager
 ): Promise<Response<TabCloseData>> {
-  const result = await browser.closeTab(command.index);
+  const result = await browser.closeTab(command.tabId);
   return successResponse(command.id, result);
 }
 

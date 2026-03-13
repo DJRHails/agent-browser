@@ -455,29 +455,39 @@ describe('BrowserManager', () => {
   describe('tabs', () => {
     it('should create new tab', async () => {
       const result = await browser.newTab();
-      expect(result.index).toBe(1);
       expect(result.total).toBe(2);
+      expect(result.tabId).toBe(1);
     });
 
     it('should list tabs', async () => {
       const tabs = await browser.listTabs();
       expect(tabs.length).toBe(2);
+      expect(tabs.map((tab) => tab.tabId)).toEqual([0, 1]);
     });
 
     it('should close tab', async () => {
-      // Switch to second tab and close it
-      const page = browser.getPage();
       const tabs = await browser.listTabs();
       if (tabs.length > 1) {
-        const result = await browser.closeTab(1);
+        const result = await browser.closeTab(tabs[1].tabId);
         expect(result.remaining).toBe(1);
       }
     });
 
+    it('should keep stable tab IDs after close', async () => {
+      const first = await browser.newTab();
+      const second = await browser.newTab();
+      const tabsBeforeClose = await browser.listTabs();
+      expect(tabsBeforeClose.map((tab) => tab.tabId)).toEqual([0, first.tabId, second.tabId]);
+
+      await browser.closeTab(first.tabId);
+
+      const tabsAfterClose = await browser.listTabs();
+      expect(tabsAfterClose.map((tab) => tab.tabId)).toEqual([0, second.tabId]);
+    });
+
     it('should auto-switch to externally opened tab (window.open)', async () => {
-      // Ensure we start on tab 0
-      const initialIndex = browser.getActiveIndex();
-      expect(initialIndex).toBe(0);
+      const initialTabs = await browser.listTabs();
+      const initialCount = initialTabs.length;
 
       const page = browser.getPage();
 
@@ -490,15 +500,12 @@ describe('BrowserManager', () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Active tab should now be the newly opened tab
-      const newIndex = browser.getActiveIndex();
-      expect(newIndex).toBe(1);
-
       const tabs = await browser.listTabs();
-      expect(tabs.length).toBe(2);
-      expect(tabs[1].active).toBe(true);
+      expect(tabs.length).toBe(initialCount + 1);
+      expect(tabs[tabs.length - 1].active).toBe(true);
 
       // Clean up: close the new tab
-      await browser.closeTab(1);
+      await browser.closeTab(tabs[tabs.length - 1].tabId);
     });
   });
 
@@ -984,13 +991,12 @@ describe('BrowserManager', () => {
   describe('tab switch invalidates CDP session', () => {
     // Clean up any extra tabs before each test
     beforeEach(async () => {
-      // Close all tabs except the first one
       const tabs = await browser.listTabs();
-      for (let i = tabs.length - 1; i > 0; i--) {
-        await browser.closeTab(i);
+      const keepId = tabs[0].tabId;
+      for (const tab of tabs.slice(1).reverse()) {
+        await browser.closeTab(tab.tabId);
       }
-      // Ensure we're on tab 0
-      await browser.switchTo(0);
+      await browser.switchTo(keepId);
       // Stop any active screencast
       if (browser.isScreencasting()) {
         await browser.stopScreencast();
@@ -1002,7 +1008,7 @@ describe('BrowserManager', () => {
       const cdp1 = await browser.getCDPSession();
 
       // Switch to same tab - should NOT invalidate
-      await browser.switchTo(0);
+      await browser.switchTo((await browser.listTabs())[0].tabId);
 
       // Should be the same session
       const cdp2 = await browser.getCDPSession();
@@ -1031,8 +1037,8 @@ describe('BrowserManager', () => {
       expect(browser.isScreencasting()).toBe(true);
 
       // Create new tab and switch
-      await browser.newTab();
-      await browser.switchTo(1);
+      const newTab = await browser.newTab();
+      await browser.switchTo(newTab.tabId);
 
       // Screencast should be stopped (it's page-specific)
       expect(browser.isScreencasting()).toBe(false);

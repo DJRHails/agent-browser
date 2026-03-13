@@ -911,13 +911,13 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
             Some("close") => {
                 let mut cmd = json!({ "id": id, "action": "tab_close" });
                 if let Some(index) = rest.get(1).and_then(|s| s.parse::<i32>().ok()) {
-                    cmd["index"] = json!(index);
+                    cmd["tabId"] = json!(index);
                 }
                 Ok(cmd)
             }
             Some(n) if n.parse::<i32>().is_ok() => {
-                let index = n.parse::<i32>().expect("already checked parse succeeds");
-                Ok(json!({ "id": id, "action": "tab_switch", "index": index }))
+                let tab_id = n.parse::<i32>().expect("already checked parse succeeds");
+                Ok(json!({ "id": id, "action": "tab_switch", "tabId": tab_id }))
             }
             _ => Ok(json!({ "id": id, "action": "tab_list" })),
         },
@@ -2090,6 +2090,7 @@ mod tests {
     fn default_flags() -> Flags {
         Flags {
             session: "test".to_string(),
+            tab: None,
             json: false,
             full: false,
             headed: false,
@@ -2579,13 +2580,20 @@ mod tests {
     fn test_tab_switch() {
         let cmd = parse_command(&args("tab 2"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "tab_switch");
-        assert_eq!(cmd["index"], 2);
+        assert_eq!(cmd["tabId"], 2);
     }
 
     #[test]
     fn test_tab_close() {
         let cmd = parse_command(&args("tab close"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "tab_close");
+    }
+
+    #[test]
+    fn test_tab_close_with_id() {
+        let cmd = parse_command(&args("tab close 2"), &default_flags()).unwrap();
+        assert_eq!(cmd["action"], "tab_close");
+        assert_eq!(cmd["tabId"], 2);
     }
 
     // === Screenshot ===

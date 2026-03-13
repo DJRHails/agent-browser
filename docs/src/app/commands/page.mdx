@@ -169,13 +169,22 @@ agent-browser network requests --filter <pat>  # Filter by URL pattern
 ## Tabs & frames
 
 ```bash
-agent-browser tab                     # List tabs
-agent-browser tab new [url]           # New tab
-agent-browser tab <n>                 # Switch to tab
-agent-browser tab close [n]           # Close tab
+agent-browser tab                     # List tabs with tab IDs
+agent-browser tab new [url]           # New tab and print its tab ID
+agent-browser tab <id>                # Switch to tab by tab ID
+agent-browser tab close [id]          # Close tab by tab ID
 agent-browser window new              # Open new browser window
 agent-browser frame <sel>             # Switch to iframe
 agent-browser frame main              # Back to main frame
+```
+
+Tab IDs are stable for the lifetime of the daemon. Closing tab `2` does not renumber the remaining tabs.
+
+Use `--tab <id>` to target a tab directly for page-scoped commands:
+
+```bash
+agent-browser --tab 4 snapshot
+agent-browser --tab 4 click @e3
 ```
 
 ## Dialogs
@@ -278,6 +287,7 @@ agent-browser reload                  # Reload page
 
 ```bash
 --session <name>         # Isolated browser session
+--tab <id>               # Target a specific tab ID
 --session-name <name>    # Auto-save/restore session state (cookies, localStorage)
 --profile <path>         # Persistent browser profile directory
 --state <path>           # Load storage state from JSON file
