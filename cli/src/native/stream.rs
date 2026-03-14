@@ -8,6 +8,7 @@ use tokio::sync::{broadcast, Mutex, Notify, RwLock};
 use tokio_tungstenite::tungstenite::Message;
 
 use super::cdp::client::CdpClient;
+use super::interaction::code_to_virtual_key_code;
 
 /// Frame metadata from CDP Page.screencastFrame events.
 #[derive(Debug, Clone)]
@@ -575,16 +576,27 @@ async fn handle_client_message(msg: &str, client: &CdpClient, session_id: Option
                 .await;
         }
         "input_keyboard" => {
+            let code_str = parsed
+                .get("code")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let vk = code_to_virtual_key_code(code_str);
+
+            let mut kb_params = json!({
+                "type": parsed.get("eventType").and_then(|v| v.as_str()).unwrap_or("keyDown"),
+                "key": parsed.get("key"),
+                "code": parsed.get("code"),
+                "text": parsed.get("text"),
+                "modifiers": parsed.get("modifiers").and_then(|v| v.as_i64()).unwrap_or(0),
+            });
+            if vk != 0 {
+                kb_params["windowsVirtualKeyCode"] = json!(vk);
+            }
+
             let _ = client
                 .send_command(
                     "Input.dispatchKeyEvent",
-                    Some(json!({
-                        "type": parsed.get("eventType").and_then(|v| v.as_str()).unwrap_or("keyDown"),
-                        "key": parsed.get("key"),
-                        "code": parsed.get("code"),
-                        "text": parsed.get("text"),
-                        "modifiers": parsed.get("modifiers").and_then(|v| v.as_i64()).unwrap_or(0),
-                    })),
+                    Some(kb_params),
                     session_id,
                 )
                 .await;
