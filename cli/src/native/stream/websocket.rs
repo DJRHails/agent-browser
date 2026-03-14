@@ -12,6 +12,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
 use crate::native::cdp::client::CdpClient;
+use crate::native::interaction::code_to_virtual_key_code;
 
 use super::http::handle_http_request;
 use super::{is_allowed_origin, timestamp_ms, IdleActivity, StreamFrame};
@@ -589,12 +590,18 @@ fn keyboard_params(parsed: &Value) -> Value {
             params.insert(field.into(), json!(value));
         }
     }
+    let client_vk = parsed
+        .get("windowsVirtualKeyCode")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let derived_vk = parsed
+        .get("code")
+        .and_then(|v| v.as_str())
+        .map(|c| code_to_virtual_key_code(c) as i64)
+        .unwrap_or(0);
     params.insert(
         "windowsVirtualKeyCode".into(),
-        json!(parsed
-            .get("windowsVirtualKeyCode")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0)),
+        json!(if client_vk != 0 { client_vk } else { derived_vk }),
     );
     params.insert(
         "modifiers".into(),
