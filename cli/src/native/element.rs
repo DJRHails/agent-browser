@@ -12,6 +12,12 @@ pub struct RefEntry {
     pub name: String,
     pub nth: Option<usize>,
     pub selector: Option<String>,
+    /// When set, this element lives inside an iframe identified by its
+    /// frame ID. Element resolution must target the correct frame.
+    /// Currently iframe element refs are not interactively resolvable
+    /// because resolving them requires routing CDP commands to the
+    /// correct frame session, which is not yet implemented.
+    pub frame_id: Option<String>,
 }
 
 pub struct RefMap {
@@ -43,6 +49,29 @@ impl RefMap {
                 name: name.to_string(),
                 nth,
                 selector: None,
+                frame_id: None,
+            },
+        );
+    }
+
+    pub fn add_with_frame(
+        &mut self,
+        ref_id: String,
+        backend_node_id: Option<i64>,
+        role: &str,
+        name: &str,
+        nth: Option<usize>,
+        frame_id: String,
+    ) {
+        self.map.insert(
+            ref_id,
+            RefEntry {
+                backend_node_id,
+                role: role.to_string(),
+                name: name.to_string(),
+                nth,
+                selector: None,
+                frame_id: Some(frame_id),
             },
         );
     }
@@ -63,6 +92,7 @@ impl RefMap {
                 name: name.to_string(),
                 nth,
                 selector: Some(selector),
+                frame_id: None,
             },
         );
     }
@@ -816,6 +846,47 @@ mod tests {
         assert!(map.get("e1").is_some());
         assert_eq!(map.get("e1").unwrap().role, "button");
         assert!(map.get("e2").is_none());
+    }
+
+    #[test]
+    fn test_add_with_frame_stores_frame_id() {
+        let mut map = RefMap::new();
+        map.add_with_frame(
+            "e1".to_string(),
+            Some(10),
+            "button",
+            "OK",
+            None,
+            "iframe-1".to_string(),
+        );
+        let entry = map.get("e1").unwrap();
+        assert_eq!(entry.frame_id, Some("iframe-1".to_string()));
+        assert_eq!(entry.role, "button");
+        assert_eq!(entry.name, "OK");
+        assert_eq!(entry.backend_node_id, Some(10));
+    }
+
+    #[test]
+    fn test_add_has_no_frame_id() {
+        let mut map = RefMap::new();
+        map.add("e1".to_string(), Some(5), "link", "Home", None);
+        let entry = map.get("e1").unwrap();
+        assert_eq!(entry.frame_id, None);
+    }
+
+    #[test]
+    fn test_add_selector_has_no_frame_id() {
+        let mut map = RefMap::new();
+        map.add_selector(
+            "e1".to_string(),
+            "#my-btn".to_string(),
+            "button",
+            "Click",
+            None,
+        );
+        let entry = map.get("e1").unwrap();
+        assert_eq!(entry.frame_id, None);
+        assert_eq!(entry.selector, Some("#my-btn".to_string()));
     }
 
     #[test]
