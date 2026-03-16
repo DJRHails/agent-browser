@@ -104,8 +104,8 @@ impl StreamServer {
         client_slot: Arc<RwLock<Option<Arc<CdpClient>>>>,
         _session_id: String,
     ) -> Result<(Self, Arc<RwLock<Option<Arc<CdpClient>>>>), String> {
-        let host = std::env::var("AGENT_BROWSER_STREAM_HOST")
-            .unwrap_or_else(|_| "127.0.0.1".to_string());
+        let host =
+            std::env::var("AGENT_BROWSER_STREAM_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
         let addr = format!("{}:{}", host, preferred_port);
         let listener = TcpListener::bind(&addr)
             .await
@@ -616,10 +616,7 @@ pub fn is_allowed_origin(origin: Option<&str>) -> bool {
     is_allowed_with_env(origin, env_origins.as_deref())
 }
 
-fn is_allowed_with_env(
-    origin: Option<&str>,
-    env_origins: Option<&str>,
-) -> bool {
+fn is_allowed_with_env(origin: Option<&str>, env_origins: Option<&str>) -> bool {
     match origin {
         None => true,
         Some(o) => {
@@ -628,11 +625,7 @@ fn is_allowed_with_env(
             }
             if let Ok(url) = url::Url::parse(o) {
                 let host = url.host_str().unwrap_or("");
-                if host == "localhost"
-                    || host == "127.0.0.1"
-                    || host == "::1"
-                    || host == "[::1]"
-                {
+                if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]" {
                     return true;
                 }
             }
@@ -725,10 +718,7 @@ mod tests {
 
     #[test]
     fn test_env_wildcard_allows_all() {
-        assert!(is_allowed_with_env(
-            Some("http://evil.com"),
-            Some("*"),
-        ));
+        assert!(is_allowed_with_env(Some("http://evil.com"), Some("*"),));
         assert!(is_allowed_with_env(
             Some("http://anything.example.com"),
             Some("  *  "),
@@ -794,14 +784,8 @@ mod tests {
 
     #[test]
     fn test_env_none_falls_back_to_default() {
-        assert!(!is_allowed_with_env(
-            Some("http://evil.com"),
-            None,
-        ));
-        assert!(is_allowed_with_env(
-            Some("http://localhost:3000"),
-            None,
-        ));
+        assert!(!is_allowed_with_env(Some("http://evil.com"), None,));
+        assert!(is_allowed_with_env(Some("http://localhost:3000"), None,));
     }
 
     #[test]
