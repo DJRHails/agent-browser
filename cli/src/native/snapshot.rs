@@ -255,7 +255,7 @@ fn build_and_render_ax_tree(
 
     // When a selector is given, find AX nodes whose backendDOMNodeId falls
     // within the target DOM subtree and pick the top-level ones as roots.
-    let effective_roots = if let Some(ref id_set) = selector_backend_ids {
+    let effective_roots = if let Some(id_set) = &selector_backend_ids {
         // Mark which tree_nodes belong to the target DOM subtree.
         let in_subtree: Vec<bool> = tree_nodes
             .iter()
