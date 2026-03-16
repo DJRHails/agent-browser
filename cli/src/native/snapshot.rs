@@ -199,14 +199,15 @@ pub async fn take_snapshot(
         .await?;
 
     let mut output = build_and_render_ax_tree(
-        &ax_tree.nodes, options, ref_map, None, selector_backend_ids.as_ref(),
+        &ax_tree.nodes,
+        options,
+        ref_map,
+        None,
+        selector_backend_ids.as_ref(),
     )?;
 
     // Discover child frames and append their AX snapshots
-    let iframe_output = build_iframe_snapshots(
-        client, session_id, options, ref_map,
-    )
-    .await;
+    let iframe_output = build_iframe_snapshots(client, session_id, options, ref_map).await;
     output.push_str(&iframe_output);
 
     if options.compact {
@@ -352,7 +353,6 @@ fn build_and_render_ax_tree(
     Ok(output)
 }
 
-
 /// Collect child frame info from a FrameTree value recursively.
 fn collect_child_frames(frame_tree: &Value, out: &mut Vec<(String, String, String)>) {
     let child_frames = match frame_tree.get("childFrames").and_then(|v| v.as_array()) {
@@ -395,11 +395,7 @@ async fn build_iframe_snapshots(
     ref_map: &mut RefMap,
 ) -> String {
     let frame_tree_result = client
-        .send_command(
-            "Page.getFrameTree",
-            None,
-            Some(session_id),
-        )
+        .send_command("Page.getFrameTree", None, Some(session_id))
         .await;
 
     let frame_tree_value = match frame_tree_result {
@@ -1332,9 +1328,6 @@ mod tests {
         });
         let mut out = Vec::new();
         collect_child_frames(&tree, &mut out);
-        assert!(
-            out.is_empty(),
-            "frames without an id should be skipped"
-        );
+        assert!(out.is_empty(), "frames without an id should be skipped");
     }
 }
