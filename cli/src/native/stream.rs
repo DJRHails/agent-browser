@@ -576,10 +576,7 @@ async fn handle_client_message(msg: &str, client: &CdpClient, session_id: Option
                 .await;
         }
         "input_keyboard" => {
-            let code_str = parsed
-                .get("code")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let code_str = parsed.get("code").and_then(|v| v.as_str()).unwrap_or("");
             let vk = code_to_virtual_key_code(code_str);
 
             let mut kb_params = json!({
@@ -594,11 +591,7 @@ async fn handle_client_message(msg: &str, client: &CdpClient, session_id: Option
             }
 
             let _ = client
-                .send_command(
-                    "Input.dispatchKeyEvent",
-                    Some(kb_params),
-                    session_id,
-                )
+                .send_command("Input.dispatchKeyEvent", Some(kb_params), session_id)
                 .await;
         }
         "input_touch" => {
