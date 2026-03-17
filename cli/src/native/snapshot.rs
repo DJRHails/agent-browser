@@ -208,7 +208,57 @@ pub async fn take_snapshot(
         )
         .await?;
 
-    let (tree_nodes, root_indices) = build_tree(&ax_tree.nodes);
+    // When cursor mode is enabled, pre-collect cursor-interactive elements
+    // so we can mark them with refs during tree building
+    let cursor_elements: HashMap<i64, CursorElementInfo> = if options.cursor {
+        find_cursor_interactive_elements(client, session_id)
+            .await
+            .unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+
+    let mut output = build_and_render_ax_tree(
+        &ax_tree.nodes,
+        options,
+        ref_map,
+        None,
+        selector_backend_ids.as_ref(),
+        &cursor_elements,
+    )?;
+
+    // Discover child frames and append their AX snapshots
+    let iframe_output = build_iframe_snapshots(client, session_id, options, ref_map).await;
+    output.push_str(&iframe_output);
+
+    if options.compact {
+        output = compact_tree(&output, options.interactive);
+    }
+
+    let trimmed = output.trim().to_string();
+
+    if trimmed.is_empty() {
+        if options.interactive {
+            return Ok("(no interactive elements)".to_string());
+        }
+        return Ok("(empty page)".to_string());
+    }
+
+    Ok(trimmed)
+}
+
+/// Build tree nodes from AX nodes, assign refs, render to text.
+/// When `frame_id` is Some, refs are tagged with the frame ID so
+/// callers know the element lives inside an iframe.
+fn build_and_render_ax_tree(
+    ax_nodes: &[AXNode],
+    options: &SnapshotOptions,
+    ref_map: &mut RefMap,
+    frame_id: Option<&str>,
+    selector_backend_ids: Option<&std::collections::HashSet<i64>>,
+    cursor_elements: &HashMap<i64, CursorElementInfo>,
+) -> Result<String, String> {
+    let (tree_nodes, root_indices) = build_tree(ax_nodes);
 
     // When a selector is given, find AX nodes whose backendDOMNodeId falls
     // within the target DOM subtree and pick the top-level ones as roots.
@@ -245,18 +295,7 @@ pub async fn take_snapshot(
 
     let mut tracker = RoleNameTracker::new();
     let mut next_ref: usize = ref_map.next_ref_num();
-
     let mut nodes_with_refs: Vec<(usize, usize)> = Vec::new();
-
-    // When cursor mode is enabled, pre-collect cursor-interactive elements
-    // so we can mark them with refs during tree building
-    let cursor_elements: HashMap<i64, CursorElementInfo> = if options.cursor {
-        find_cursor_interactive_elements(client, session_id)
-            .await
-            .unwrap_or_default()
-    } else {
-        HashMap::new()
-    };
 
     for (idx, node) in tree_nodes.iter().enumerate() {
         let role = node.role.as_str();
@@ -293,13 +332,24 @@ pub async fn take_snapshot(
         let ref_id = format!("e{}", next_ref);
         next_ref += 1;
 
-        ref_map.add(
-            ref_id.clone(),
-            tree_nodes[*idx].backend_node_id,
-            &tree_nodes[*idx].role,
-            &tree_nodes[*idx].name,
-            actual_nth,
-        );
+        if let Some(fid) = frame_id {
+            ref_map.add_with_frame(
+                ref_id.clone(),
+                tree_nodes[*idx].backend_node_id,
+                &tree_nodes[*idx].role,
+                &tree_nodes[*idx].name,
+                actual_nth,
+                fid.to_string(),
+            );
+        } else {
+            ref_map.add(
+                ref_id.clone(),
+                tree_nodes[*idx].backend_node_id,
+                &tree_nodes[*idx].role,
+                &tree_nodes[*idx].name,
+                actual_nth,
+            );
+        }
 
         tree_nodes[*idx].has_ref = true;
         tree_nodes[*idx].ref_id = Some(ref_id);
@@ -322,21 +372,130 @@ pub async fn take_snapshot(
     for &root_idx in &effective_roots {
         render_tree(&tree_nodes, root_idx, 0, &mut output, options);
     }
+    Ok(output)
+}
 
-    if options.compact {
-        output = compact_tree(&output, options.interactive);
-    }
-
-    let trimmed = output.trim().to_string();
-
-    if trimmed.is_empty() {
-        if options.interactive {
-            return Ok("(no interactive elements)".to_string());
+/// Collect child frame info from a FrameTree value recursively.
+fn collect_child_frames(frame_tree: &Value, out: &mut Vec<(String, String, String)>) {
+    let child_frames = match frame_tree.get("childFrames").and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return,
+    };
+    for child in child_frames {
+        if let Some(frame) = child.get("frame") {
+            let id = frame
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let url = frame
+                .get("url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let name = frame
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if !id.is_empty() {
+                out.push((id, name, url));
+            }
         }
-        return Ok("(empty page)".to_string());
+        // Recurse into nested iframes
+        collect_child_frames(child, out);
+    }
+}
+
+/// Discover child frames via Page.getFrameTree, fetch each frame's
+/// AX tree using the frameId parameter, and return the combined
+/// snapshot text. Errors on individual frames are silently skipped.
+async fn build_iframe_snapshots(
+    client: &CdpClient,
+    session_id: &str,
+    options: &SnapshotOptions,
+    ref_map: &mut RefMap,
+) -> String {
+    let frame_tree_result = client
+        .send_command("Page.getFrameTree", None, Some(session_id))
+        .await;
+
+    let frame_tree_value = match frame_tree_result {
+        Ok(v) => v,
+        Err(_) => return String::new(),
+    };
+
+    let tree = match frame_tree_value.get("frameTree") {
+        Some(t) => t,
+        None => return String::new(),
+    };
+
+    let mut child_frames: Vec<(String, String, String)> = Vec::new();
+    collect_child_frames(tree, &mut child_frames);
+
+    if child_frames.is_empty() {
+        return String::new();
     }
 
-    Ok(trimmed)
+    let mut combined = String::new();
+
+    for (frame_id, name, url) in &child_frames {
+        let ax_result: Result<GetFullAXTreeResult, String> = client
+            .send_command_typed(
+                "Accessibility.getFullAXTree",
+                &serde_json::json!({ "frameId": frame_id }),
+                Some(session_id),
+            )
+            .await;
+
+        let ax_tree = match ax_result {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+
+        if ax_tree.nodes.is_empty() {
+            continue;
+        }
+
+        let frame_output = match build_and_render_ax_tree(
+            &ax_tree.nodes,
+            options,
+            ref_map,
+            Some(frame_id),
+            None,
+            &HashMap::new(),
+        ) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+
+        let frame_trimmed = frame_output.trim();
+        if frame_trimmed.is_empty() {
+            continue;
+        }
+
+        // Build iframe label
+        let mut label = String::from("- iframe");
+        if !name.is_empty() {
+            label.push_str(&format!(" [name=\"{}\"", name));
+            if !url.is_empty() {
+                label.push_str(&format!(" url=\"{}\"", url));
+            }
+            label.push(']');
+        } else if !url.is_empty() {
+            label.push_str(&format!(" [url=\"{}\"]", url));
+        }
+        label.push_str(":\n");
+
+        combined.push_str(&label);
+        for line in frame_trimmed.lines() {
+            combined.push_str("  ");
+            combined.push_str(line);
+            combined.push('\n');
+        }
+    }
+
+    combined
 }
 
 async fn find_cursor_interactive_elements(
@@ -1054,5 +1213,140 @@ mod tests {
         let set = build_dedup_set(&ref_map);
         assert_eq!(set.len(), 1);
         assert!(set.contains("ok"));
+    }
+
+    #[test]
+    fn test_collect_child_frames_empty() {
+        let tree = serde_json::json!({
+            "frame": { "id": "main" },
+            "childFrames": []
+        });
+        let mut out = Vec::new();
+        collect_child_frames(&tree, &mut out);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn test_collect_child_frames_no_key() {
+        let tree = serde_json::json!({
+            "frame": { "id": "main" }
+        });
+        let mut out = Vec::new();
+        collect_child_frames(&tree, &mut out);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn test_collect_child_frames_single() {
+        let tree = serde_json::json!({
+            "frame": { "id": "main" },
+            "childFrames": [
+                {
+                    "frame": {
+                        "id": "iframe-1",
+                        "name": "my-iframe",
+                        "url": "https://example.com"
+                    }
+                }
+            ]
+        });
+        let mut out = Vec::new();
+        collect_child_frames(&tree, &mut out);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].0, "iframe-1");
+        assert_eq!(out[0].1, "my-iframe");
+        assert_eq!(out[0].2, "https://example.com");
+    }
+
+    #[test]
+    fn test_collect_child_frames_nested() {
+        let tree = serde_json::json!({
+            "frame": { "id": "main" },
+            "childFrames": [
+                {
+                    "frame": {
+                        "id": "iframe-1",
+                        "name": "outer",
+                        "url": "https://outer.com"
+                    },
+                    "childFrames": [
+                        {
+                            "frame": {
+                                "id": "iframe-2",
+                                "name": "inner",
+                                "url": "https://inner.com"
+                            }
+                        }
+                    ]
+                }
+            ]
+        });
+        let mut out = Vec::new();
+        collect_child_frames(&tree, &mut out);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].0, "iframe-1");
+        assert_eq!(out[0].1, "outer");
+        assert_eq!(out[1].0, "iframe-2");
+        assert_eq!(out[1].1, "inner");
+    }
+
+    #[test]
+    fn test_collect_child_frames_missing_name() {
+        let tree = serde_json::json!({
+            "frame": { "id": "main" },
+            "childFrames": [
+                {
+                    "frame": {
+                        "id": "iframe-1",
+                        "url": "https://example.com"
+                    }
+                }
+            ]
+        });
+        let mut out = Vec::new();
+        collect_child_frames(&tree, &mut out);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].0, "iframe-1");
+        assert_eq!(out[0].1, "");
+        assert_eq!(out[0].2, "https://example.com");
+    }
+
+    #[test]
+    fn test_collect_child_frames_missing_url() {
+        let tree = serde_json::json!({
+            "frame": { "id": "main" },
+            "childFrames": [
+                {
+                    "frame": {
+                        "id": "iframe-1",
+                        "name": "my-frame"
+                    }
+                }
+            ]
+        });
+        let mut out = Vec::new();
+        collect_child_frames(&tree, &mut out);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].0, "iframe-1");
+        assert_eq!(out[0].1, "my-frame");
+        assert_eq!(out[0].2, "");
+    }
+
+    #[test]
+    fn test_collect_child_frames_missing_id_skipped() {
+        let tree = serde_json::json!({
+            "frame": { "id": "main" },
+            "childFrames": [
+                {
+                    "frame": {
+                        "name": "no-id-frame",
+                        "url": "https://example.com"
+                    }
+                }
+            ]
+        });
+        let mut out = Vec::new();
+        collect_child_frames(&tree, &mut out);
+        assert!(out.is_empty(), "frames without an id should be skipped");
     }
 }
