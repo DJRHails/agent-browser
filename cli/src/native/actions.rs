@@ -5684,6 +5684,13 @@ async fn handle_input_keyboard(cmd: &Value, state: &DaemonState) -> Result<Value
         }
     }
 
+    if let Some(code) = cmd.get("code").and_then(|v| v.as_str()) {
+        let vk = interaction::code_to_virtual_key_code(code);
+        if vk != 0 {
+            params["windowsVirtualKeyCode"] = json!(vk);
+        }
+    }
+
     mgr.client
         .send_command("Input.dispatchKeyEvent", Some(params), Some(&session_id))
         .await?;
