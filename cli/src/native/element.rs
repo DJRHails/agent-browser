@@ -13,10 +13,9 @@ pub struct RefEntry {
     pub nth: Option<usize>,
     pub selector: Option<String>,
     /// When set, this element lives inside an iframe identified by its
-    /// frame ID. Element resolution must target the correct frame.
-    /// Currently iframe element refs are not interactively resolvable
-    /// because resolving them requires routing CDP commands to the
-    /// correct frame session, which is not yet implemented.
+    /// frame ID. CDP commands like `DOM.resolveNode` and `DOM.getBoxModel`
+    /// resolve cross-frame `backendNodeId`s correctly, so iframe refs
+    /// are fully interactive (click, fill, gettext, etc.).
     pub frame_id: Option<String>,
 }
 

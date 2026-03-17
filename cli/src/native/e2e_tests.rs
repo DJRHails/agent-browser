@@ -236,6 +236,265 @@ async fn e2e_snapshot_and_click_ref() {
 }
 
 // ---------------------------------------------------------------------------
+// Snapshot with iframes
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+#[ignore]
+async fn e2e_snapshot_iframe_traversal() {
+    let mut state = DaemonState::new();
+
+    let resp = execute_command(
+        &json!({ "id": "1", "action": "launch", "headless": true }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    // Page with a named iframe containing distinct content.
+    // The iframe src must be a real HTTP URL (not data:) for Chrome
+    // to create a child frame in the frame tree, so we use srcdoc.
+    let html = r#"data:text/html,<h1>Main Page</h1><iframe name="child" srcdoc="<h2>Iframe Content</h2><button>Click Me</button>"></iframe>"#;
+    let resp = execute_command(
+        &json!({ "id": "2", "action": "navigate", "url": html }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    // Give the iframe time to render
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    let resp = execute_command(&json!({ "id": "3", "action": "snapshot" }), &mut state).await;
+    assert_success(&resp);
+    let snapshot = get_data(&resp)["snapshot"].as_str().unwrap();
+
+    // Main page content should appear
+    assert!(
+        snapshot.contains("Main Page"),
+        "Snapshot should contain main page heading, got: {}",
+        snapshot
+    );
+
+    // Iframe content should appear via traversal
+    assert!(
+        snapshot.contains("Iframe Content"),
+        "Snapshot should contain iframe content, got: {}",
+        snapshot
+    );
+
+    // Iframe label should be present
+    assert!(
+        snapshot.contains("iframe"),
+        "Snapshot should contain iframe label, got: {}",
+        snapshot
+    );
+
+    let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
+    assert_success(&resp);
+}
+
+#[tokio::test]
+#[ignore]
+async fn e2e_iframe_click_ref() {
+    let mut state = DaemonState::new();
+
+    let resp = execute_command(
+        &json!({ "id": "1", "action": "launch", "headless": true }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    // Page with an iframe containing a button that sets a result on click
+    let html = concat!(
+        "data:text/html,",
+        "<h1>Main</h1>",
+        "<iframe name=\"child\" srcdoc=\"",
+        "<button onclick='this.textContent=&quot;clicked&quot;'>Click Me</button>",
+        "\"></iframe>",
+    );
+    let resp = execute_command(
+        &json!({ "id": "2", "action": "navigate", "url": html }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Snapshot to get refs
+    let resp = execute_command(&json!({ "id": "3", "action": "snapshot" }), &mut state).await;
+    assert_success(&resp);
+    let snapshot = get_data(&resp)["snapshot"].as_str().unwrap();
+    assert!(
+        snapshot.contains("Click Me"),
+        "Snapshot should contain button text, got: {}",
+        snapshot
+    );
+
+    // Find the ref for the button inside the iframe
+    let button_ref = snapshot
+        .lines()
+        .find(|l| l.contains("Click Me") && l.contains("ref="))
+        .and_then(|l| {
+            l.find("ref=").map(|pos| {
+                let after = &l[pos + 4..];
+                let end = after.find(']').unwrap_or(after.len());
+                after[..end].to_string()
+            })
+        })
+        .expect("Should find a ref for the iframe button");
+
+    // Click the button inside the iframe by ref
+    let resp = execute_command(
+        &json!({ "id": "4", "action": "click", "selector": button_ref }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
+    // Re-snapshot and verify the button text changed
+    let resp = execute_command(&json!({ "id": "5", "action": "snapshot" }), &mut state).await;
+    assert_success(&resp);
+    let snapshot = get_data(&resp)["snapshot"].as_str().unwrap();
+    assert!(
+        snapshot.contains("clicked"),
+        "Button inside iframe should show 'clicked' after click, got: {}",
+        snapshot
+    );
+}
+
+#[tokio::test]
+#[ignore]
+async fn e2e_iframe_gettext_ref() {
+    let mut state = DaemonState::new();
+
+    let resp = execute_command(
+        &json!({ "id": "1", "action": "launch", "headless": true }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    let html = concat!(
+        "data:text/html,",
+        "<h1>Main</h1>",
+        "<iframe name=\"child\" srcdoc=\"",
+        "<button>Iframe Button</button>",
+        "\"></iframe>",
+    );
+    let resp = execute_command(
+        &json!({ "id": "2", "action": "navigate", "url": html }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    let resp = execute_command(&json!({ "id": "3", "action": "snapshot" }), &mut state).await;
+    assert_success(&resp);
+    let snapshot = get_data(&resp)["snapshot"].as_str().unwrap();
+
+    // Find the ref for the button inside the iframe
+    let button_ref = snapshot
+        .lines()
+        .find(|l| l.contains("Iframe Button") && l.contains("ref="))
+        .and_then(|l| {
+            l.find("ref=").map(|pos| {
+                let after = &l[pos + 4..];
+                let end = after.find(']').unwrap_or(after.len());
+                after[..end].to_string()
+            })
+        })
+        .expect("Should find a ref for the iframe button");
+
+    // Get text of the element inside the iframe
+    let resp = execute_command(
+        &json!({ "id": "4", "action": "gettext", "selector": button_ref }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+    let text = get_data(&resp)["text"].as_str().unwrap();
+    assert_eq!(
+        text, "Iframe Button",
+        "gettext on iframe element should return its text"
+    );
+
+    let resp = execute_command(&json!({ "id": "99", "action": "close" }), &mut state).await;
+    assert_success(&resp);
+}
+
+#[tokio::test]
+#[ignore]
+async fn e2e_iframe_fill_ref() {
+    let mut state = DaemonState::new();
+
+    let resp = execute_command(
+        &json!({ "id": "1", "action": "launch", "headless": true }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    let html = concat!(
+        "data:text/html,",
+        "<h1>Main</h1>",
+        "<iframe name=\"child\" srcdoc=\"",
+        "<input placeholder='Enter text' />",
+        "\"></iframe>",
+    );
+    let resp = execute_command(
+        &json!({ "id": "2", "action": "navigate", "url": html }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Snapshot to get refs
+    let resp = execute_command(&json!({ "id": "3", "action": "snapshot" }), &mut state).await;
+    assert_success(&resp);
+    let snapshot = get_data(&resp)["snapshot"].as_str().unwrap();
+
+    // Find the ref for the input inside the iframe
+    let input_ref = snapshot
+        .lines()
+        .find(|l| l.contains("Enter text") && l.contains("ref="))
+        .and_then(|l| {
+            l.find("ref=").map(|pos| {
+                let after = &l[pos + 4..];
+                let end = after.find(']').unwrap_or(after.len());
+                after[..end].to_string()
+            })
+        })
+        .expect("Should find a ref for the iframe input");
+
+    // Fill the input inside the iframe by ref
+    let resp = execute_command(
+        &json!({ "id": "4", "action": "fill", "selector": input_ref, "value": "hello iframe" }),
+        &mut state,
+    )
+    .await;
+    assert_success(&resp);
+
+    // Verify the value was set
+    let resp = execute_command(&json!({ "id": "5", "action": "snapshot" }), &mut state).await;
+    assert_success(&resp);
+    let snapshot = get_data(&resp)["snapshot"].as_str().unwrap();
+    assert!(
+        snapshot.contains("hello iframe"),
+        "Input inside iframe should contain 'hello iframe' after fill, got: {}",
+        snapshot
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Screenshot
 // ---------------------------------------------------------------------------
 
