@@ -137,6 +137,7 @@ pub fn to_ai_friendly_error(error: &str) -> String {
 
 #[derive(Debug, Clone)]
 pub struct PageInfo {
+    pub tab_id: u32,
     pub target_id: String,
     pub session_id: String,
     pub url: String,
@@ -199,6 +200,7 @@ pub struct BrowserManager {
     default_timeout_ms: u64,
     /// Stored download path from launch options, re-applied to new contexts (e.g., recording)
     pub download_path: Option<String>,
+    next_tab_id: u32,
 }
 
 const LIGHTPANDA_CDP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -268,6 +270,7 @@ impl BrowserManager {
                 active_page_index: 0,
                 default_timeout_ms: 25_000,
                 download_path: download_path.clone(),
+                next_tab_id: 1,
             };
             manager.discover_and_attach_targets().await?;
             manager
@@ -333,6 +336,7 @@ impl BrowserManager {
             active_page_index: 0,
             default_timeout_ms: 10_000,
             download_path: None, // CDP connections don't have a launch-time download path
+            next_tab_id: 1,
         };
 
         manager.discover_and_attach_targets().await?;
@@ -389,7 +393,10 @@ impl BrowserManager {
                 )
                 .await?;
 
+            let tab_id = self.next_tab_id;
+            self.next_tab_id += 1;
             self.pages.push(PageInfo {
+                tab_id,
                 target_id: result.target_id,
                 session_id: attach_result.session_id.clone(),
                 url: "about:blank".to_string(),
@@ -412,7 +419,10 @@ impl BrowserManager {
                     )
                     .await?;
 
+                let tab_id = self.next_tab_id;
+                self.next_tab_id += 1;
                 self.pages.push(PageInfo {
+                    tab_id,
                     target_id: target.target_id.clone(),
                     session_id: attach_result.session_id.clone(),
                     url: target.url.clone(),
@@ -718,7 +728,10 @@ impl BrowserManager {
             )
             .await?;
 
+        let tab_id = self.next_tab_id;
+        self.next_tab_id += 1;
         self.pages.push(PageInfo {
+            tab_id,
             target_id: result.target_id,
             session_id: attach_result.session_id.clone(),
             url: "about:blank".to_string(),
@@ -753,7 +766,7 @@ impl BrowserManager {
             .enumerate()
             .map(|(i, p)| {
                 json!({
-                    "index": i,
+                    "tabId": p.tab_id,
                     "title": p.title,
                     "url": p.url,
                     "type": p.target_type,
@@ -791,8 +804,11 @@ impl BrowserManager {
 
         self.enable_domains(&attach.session_id).await?;
 
+        let tab_id = self.next_tab_id;
+        self.next_tab_id += 1;
         let index = self.pages.len();
         self.pages.push(PageInfo {
+            tab_id,
             target_id: result.target_id,
             session_id: attach.session_id,
             url: target_url.to_string(),
@@ -801,7 +817,7 @@ impl BrowserManager {
         });
         self.active_page_index = index;
 
-        Ok(json!({ "index": index, "url": target_url }))
+        Ok(json!({ "tabId": tab_id, "url": target_url, "total": self.pages.len() }))
     }
 
     pub async fn tab_switch(&mut self, index: usize) -> Result<Value, String> {
@@ -831,7 +847,8 @@ impl BrowserManager {
             page.title = title.clone();
         }
 
-        Ok(json!({ "index": index, "url": url, "title": title }))
+        let tab_id = self.pages[index].tab_id;
+        Ok(json!({ "tabId": tab_id, "url": url, "title": title }))
     }
 
     pub async fn tab_close(&mut self, index: Option<usize>) -> Result<Value, String> {
@@ -846,6 +863,7 @@ impl BrowserManager {
         }
 
         let page = self.pages.remove(target_index);
+        let closed_tab_id = page.tab_id;
         let _ = self
             .client
             .send_command_typed::<_, Value>(
@@ -864,7 +882,7 @@ impl BrowserManager {
         let session_id = self.pages[self.active_page_index].session_id.clone();
         self.enable_domains(&session_id).await?;
 
-        Ok(json!({ "closed": target_index, "activeIndex": self.active_page_index }))
+        Ok(json!({ "tabId": closed_tab_id, "closed": true }))
     }
 
     // -----------------------------------------------------------------------
@@ -1100,6 +1118,34 @@ impl BrowserManager {
             .to_string())
     }
 
+    pub async fn tab_switch_by_id(&mut self, tab_id: u32) -> Result<Value, String> {
+        let index = self
+            .pages
+            .iter()
+            .position(|p| p.tab_id == tab_id)
+            .ok_or_else(|| format!("Tab ID {} not found", tab_id))?;
+        self.tab_switch(index).await
+    }
+
+    pub async fn tab_close_by_id(&mut self, tab_id: Option<u32>) -> Result<Value, String> {
+        let index = match tab_id {
+            Some(id) => Some(
+                self.pages
+                    .iter()
+                    .position(|p| p.tab_id == id)
+                    .ok_or_else(|| format!("Tab ID {} not found", id))?,
+            ),
+            None => None,
+        };
+        self.tab_close(index).await
+    }
+
+    pub fn assign_tab_id(&mut self) -> u32 {
+        let id = self.next_tab_id;
+        self.next_tab_id += 1;
+        id
+    }
+
     pub fn add_page(&mut self, page: PageInfo) {
         let index = self.pages.len();
         self.pages.push(page);
@@ -1276,6 +1322,7 @@ async fn initialize_lightpanda_manager(
             active_page_index: 0,
             default_timeout_ms: 25_000,
             download_path: None,
+            next_tab_id: 1,
         };
 
         match discover_and_attach_lightpanda_targets(&mut manager, deadline).await {
