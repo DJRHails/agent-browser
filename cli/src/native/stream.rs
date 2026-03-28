@@ -10,6 +10,7 @@ use tokio::sync::{broadcast, watch, Mutex, Notify, RwLock};
 use tokio_tungstenite::tungstenite::Message;
 
 use super::cdp::client::CdpClient;
+use super::interaction::code_to_virtual_key_code;
 use crate::connection::get_socket_dir;
 #[cfg(windows)]
 use crate::connection::resolve_port;
@@ -1035,19 +1036,22 @@ async fn handle_client_message(msg: &str, client: &CdpClient, session_id: Option
                 .await;
         }
         "input_keyboard" => {
+            let code_str = parsed.get("code").and_then(|v| v.as_str()).unwrap_or("");
+            let vk = code_to_virtual_key_code(code_str);
+
+            let mut kb_params = json!({
+                "type": parsed.get("eventType").and_then(|v| v.as_str()).unwrap_or("keyDown"),
+                "key": parsed.get("key"),
+                "code": parsed.get("code"),
+                "text": parsed.get("text"),
+                "modifiers": parsed.get("modifiers").and_then(|v| v.as_i64()).unwrap_or(0),
+            });
+            if vk != 0 {
+                kb_params["windowsVirtualKeyCode"] = json!(vk);
+            }
+
             let _ = client
-                .send_command(
-                    "Input.dispatchKeyEvent",
-                    Some(json!({
-                        "type": parsed.get("eventType").and_then(|v| v.as_str()).unwrap_or("keyDown"),
-                        "key": parsed.get("key"),
-                        "code": parsed.get("code"),
-                        "text": parsed.get("text"),
-                        "windowsVirtualKeyCode": parsed.get("windowsVirtualKeyCode").and_then(|v| v.as_i64()).unwrap_or(0),
-                        "modifiers": parsed.get("modifiers").and_then(|v| v.as_i64()).unwrap_or(0),
-                    })),
-                    session_id,
-                )
+                .send_command("Input.dispatchKeyEvent", Some(kb_params), session_id)
                 .await;
         }
         "input_touch" => {
