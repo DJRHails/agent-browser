@@ -163,11 +163,13 @@ impl StreamServer {
         session_id: String,
         allow_port_fallback: bool,
     ) -> Result<(Self, Arc<RwLock<Option<Arc<CdpClient>>>>), String> {
-        let addr = format!("127.0.0.1:{}", preferred_port);
+        let host =
+            std::env::var("AGENT_BROWSER_STREAM_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+        let addr = format!("{}:{}", host, preferred_port);
         let listener = match TcpListener::bind(&addr).await {
             Ok(l) => l,
             Err(_) if allow_port_fallback && preferred_port != 0 => {
-                TcpListener::bind("127.0.0.1:0")
+                TcpListener::bind(format!("{}:0", host))
                     .await
                     .map_err(|e| format!("Failed to bind stream server: {}", e))?
             }
@@ -1415,6 +1417,11 @@ fn timestamp_ms() -> u64 {
 }
 
 pub fn is_allowed_origin(origin: Option<&str>) -> bool {
+    let env_origins = std::env::var("AGENT_BROWSER_STREAM_ALLOWED_ORIGINS").ok();
+    is_allowed_with_env(origin, env_origins.as_deref())
+}
+
+fn is_allowed_with_env(origin: Option<&str>, env_origins: Option<&str>) -> bool {
     match origin {
         None => true,
         Some(o) => {
@@ -1423,9 +1430,21 @@ pub fn is_allowed_origin(origin: Option<&str>) -> bool {
             }
             if let Ok(url) = url::Url::parse(o) {
                 let host = url.host_str().unwrap_or("");
-                host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
-            } else {
-                false
+                if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]" {
+                    return true;
+                }
+            }
+            match env_origins {
+                Some(patterns) => {
+                    if patterns.trim() == "*" {
+                        return true;
+                    }
+                    patterns.split(',').any(|pattern| {
+                        let pattern = pattern.trim();
+                        !pattern.is_empty() && o.contains(pattern)
+                    })
+                }
+                None => false,
             }
         }
     }
@@ -1771,6 +1790,78 @@ mod tests {
     #[test]
     fn test_disallowed_origin() {
         assert!(!is_allowed_origin(Some("http://evil.com")));
+    }
+
+    #[test]
+    fn test_env_wildcard_allows_all() {
+        assert!(is_allowed_with_env(Some("http://evil.com"), Some("*"),));
+        assert!(is_allowed_with_env(
+            Some("http://anything.example.com"),
+            Some("  *  "),
+        ));
+    }
+
+    #[test]
+    fn test_env_comma_separated_patterns() {
+        let patterns = "saint.work,example.com";
+        assert!(is_allowed_with_env(
+            Some("http://saint.work:3000"),
+            Some(patterns),
+        ));
+        assert!(is_allowed_with_env(
+            Some("https://app.example.com"),
+            Some(patterns),
+        ));
+        assert!(!is_allowed_with_env(
+            Some("http://evil.com"),
+            Some(patterns),
+        ));
+    }
+
+    #[test]
+    fn test_env_whitespace_trimmed() {
+        assert!(is_allowed_with_env(
+            Some("http://saint.work"),
+            Some("  saint.work , example.com "),
+        ));
+    }
+
+    #[test]
+    fn test_env_empty_patterns_skipped() {
+        assert!(!is_allowed_with_env(
+            Some("http://evil.com"),
+            Some("saint.work,,"),
+        ));
+        assert!(is_allowed_with_env(
+            Some("http://saint.work"),
+            Some("saint.work,,"),
+        ));
+    }
+
+    #[test]
+    fn test_env_localhost_always_allowed() {
+        assert!(is_allowed_with_env(
+            Some("http://localhost:3000"),
+            Some("saint.work"),
+        ));
+        assert!(is_allowed_with_env(
+            Some("http://127.0.0.1:8080"),
+            Some("saint.work"),
+        ));
+    }
+
+    #[test]
+    fn test_env_file_always_allowed() {
+        assert!(is_allowed_with_env(
+            Some("file:///path/to/file"),
+            Some("saint.work"),
+        ));
+    }
+
+    #[test]
+    fn test_env_none_falls_back_to_default() {
+        assert!(!is_allowed_with_env(Some("http://evil.com"), None,));
+        assert!(is_allowed_with_env(Some("http://localhost:3000"), None,));
     }
 
     #[test]
