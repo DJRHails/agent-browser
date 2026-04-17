@@ -958,6 +958,93 @@ async fn dispatch_click(
     Ok(())
 }
 
+/// Maps a DOM KeyboardEvent.code value to a Windows virtual key code.
+///
+/// Covers editing/whitespace, navigation, modifiers, function keys,
+/// punctuation, letters (KeyA..KeyZ), and digits (Digit0..Digit9).
+/// Returns 0 for unrecognized codes.
+pub fn code_to_virtual_key_code(code: &str) -> i32 {
+    match code {
+        // Editing & whitespace
+        "Backspace" => 8,
+        "Tab" => 9,
+        "Enter" | "NumpadEnter" => 13,
+        "Escape" => 27,
+        "Space" => 32,
+        "Delete" => 46,
+
+        // Navigation
+        "ArrowLeft" => 37,
+        "ArrowUp" => 38,
+        "ArrowRight" => 39,
+        "ArrowDown" => 40,
+        "Home" => 36,
+        "End" => 35,
+        "PageUp" => 33,
+        "PageDown" => 34,
+        "Insert" => 45,
+
+        // Modifiers
+        "ShiftLeft" | "ShiftRight" => 16,
+        "ControlLeft" | "ControlRight" => 17,
+        "AltLeft" | "AltRight" => 18,
+        "MetaLeft" => 91,
+        "MetaRight" => 93,
+        "CapsLock" => 20,
+        "NumLock" => 144,
+        "ScrollLock" => 145,
+
+        // Function keys
+        "F1" => 112,
+        "F2" => 113,
+        "F3" => 114,
+        "F4" => 115,
+        "F5" => 116,
+        "F6" => 117,
+        "F7" => 118,
+        "F8" => 119,
+        "F9" => 120,
+        "F10" => 121,
+        "F11" => 122,
+        "F12" => 123,
+
+        // Punctuation
+        "Minus" => 189,
+        "Equal" => 187,
+        "BracketLeft" => 219,
+        "BracketRight" => 221,
+        "Backslash" => 220,
+        "Semicolon" => 186,
+        "Quote" => 222,
+        "Comma" => 188,
+        "Period" => 190,
+        "Slash" => 191,
+        "Backquote" => 192,
+
+        // Letters: KeyA(65)..KeyZ(90)
+        _ if code.starts_with("Key") && code.len() == 4 => {
+            let ch = code.as_bytes()[3];
+            if ch.is_ascii_uppercase() {
+                ch as i32
+            } else {
+                0
+            }
+        }
+
+        // Digits: Digit0(48)..Digit9(57)
+        _ if code.starts_with("Digit") && code.len() == 6 => {
+            let ch = code.as_bytes()[5];
+            if ch.is_ascii_digit() {
+                ch as i32
+            } else {
+                0
+            }
+        }
+
+        _ => 0,
+    }
+}
+
 fn char_to_key_info(ch: char) -> (String, String, i32) {
     match ch {
         '\n' | '\r' => ("Enter".to_string(), "Enter".to_string(), 13),
@@ -1179,5 +1266,89 @@ mod tests {
         assert_eq!(key_text("ArrowUp"), None);
         assert_eq!(key_text("Backspace"), None);
         assert_eq!(key_text("Delete"), None);
+    }
+
+    #[test]
+    fn editing_and_whitespace_keys() {
+        assert_eq!(code_to_virtual_key_code("Backspace"), 8);
+        assert_eq!(code_to_virtual_key_code("Tab"), 9);
+        assert_eq!(code_to_virtual_key_code("Enter"), 13);
+        assert_eq!(code_to_virtual_key_code("NumpadEnter"), 13);
+        assert_eq!(code_to_virtual_key_code("Escape"), 27);
+        assert_eq!(code_to_virtual_key_code("Space"), 32);
+        assert_eq!(code_to_virtual_key_code("Delete"), 46);
+    }
+
+    #[test]
+    fn navigation_keys() {
+        assert_eq!(code_to_virtual_key_code("ArrowLeft"), 37);
+        assert_eq!(code_to_virtual_key_code("ArrowUp"), 38);
+        assert_eq!(code_to_virtual_key_code("ArrowRight"), 39);
+        assert_eq!(code_to_virtual_key_code("ArrowDown"), 40);
+        assert_eq!(code_to_virtual_key_code("Home"), 36);
+        assert_eq!(code_to_virtual_key_code("End"), 35);
+        assert_eq!(code_to_virtual_key_code("PageUp"), 33);
+        assert_eq!(code_to_virtual_key_code("PageDown"), 34);
+        assert_eq!(code_to_virtual_key_code("Insert"), 45);
+    }
+
+    #[test]
+    fn modifier_keys() {
+        assert_eq!(code_to_virtual_key_code("ShiftLeft"), 16);
+        assert_eq!(code_to_virtual_key_code("ShiftRight"), 16);
+        assert_eq!(code_to_virtual_key_code("ControlLeft"), 17);
+        assert_eq!(code_to_virtual_key_code("ControlRight"), 17);
+        assert_eq!(code_to_virtual_key_code("AltLeft"), 18);
+        assert_eq!(code_to_virtual_key_code("AltRight"), 18);
+        assert_eq!(code_to_virtual_key_code("MetaLeft"), 91);
+        assert_eq!(code_to_virtual_key_code("MetaRight"), 93);
+        assert_eq!(code_to_virtual_key_code("CapsLock"), 20);
+        assert_eq!(code_to_virtual_key_code("NumLock"), 144);
+        assert_eq!(code_to_virtual_key_code("ScrollLock"), 145);
+    }
+
+    #[test]
+    fn function_keys() {
+        for (i, expected) in (112..=123).enumerate() {
+            let code = format!("F{}", i + 1);
+            assert_eq!(code_to_virtual_key_code(&code), expected);
+        }
+    }
+
+    #[test]
+    fn punctuation_keys() {
+        assert_eq!(code_to_virtual_key_code("Minus"), 189);
+        assert_eq!(code_to_virtual_key_code("Equal"), 187);
+        assert_eq!(code_to_virtual_key_code("BracketLeft"), 219);
+        assert_eq!(code_to_virtual_key_code("BracketRight"), 221);
+        assert_eq!(code_to_virtual_key_code("Backslash"), 220);
+        assert_eq!(code_to_virtual_key_code("Semicolon"), 186);
+        assert_eq!(code_to_virtual_key_code("Quote"), 222);
+        assert_eq!(code_to_virtual_key_code("Comma"), 188);
+        assert_eq!(code_to_virtual_key_code("Period"), 190);
+        assert_eq!(code_to_virtual_key_code("Slash"), 191);
+        assert_eq!(code_to_virtual_key_code("Backquote"), 192);
+    }
+
+    #[test]
+    fn letter_keys() {
+        assert_eq!(code_to_virtual_key_code("KeyA"), 65);
+        assert_eq!(code_to_virtual_key_code("KeyZ"), 90);
+        assert_eq!(code_to_virtual_key_code("KeyM"), 77);
+    }
+
+    #[test]
+    fn digit_keys() {
+        assert_eq!(code_to_virtual_key_code("Digit0"), 48);
+        assert_eq!(code_to_virtual_key_code("Digit9"), 57);
+        assert_eq!(code_to_virtual_key_code("Digit5"), 53);
+    }
+
+    #[test]
+    fn unknown_code_returns_zero() {
+        assert_eq!(code_to_virtual_key_code(""), 0);
+        assert_eq!(code_to_virtual_key_code("UnknownKey"), 0);
+        assert_eq!(code_to_virtual_key_code("Keya"), 0);
+        assert_eq!(code_to_virtual_key_code("DigitX"), 0);
     }
 }
