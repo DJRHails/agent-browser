@@ -11,6 +11,7 @@ jobs:
   version-sync:
     name: Version Sync Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,6 +45,7 @@ jobs:
   rust:
     name: Rust
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -70,6 +72,7 @@ jobs:
   dashboard:
     name: Dashboard
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -93,6 +96,7 @@ jobs:
   sandbox-package:
     name: Sandbox Package
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -139,8 +143,12 @@ jobs:
 
   rust-cross:
     name: Rust (${{ matrix.os }} - ${{ matrix.target }})
-    if: github.event_name != 'pull_request'
+    # Heavy macOS (10x) / Windows (2x) matrix. Run only on manual dispatch,
+    # never on the daily patch-stack-sync push — upstream already runs the
+    # full cross-platform matrix, so a personal fork doesn't need it daily.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
       matrix:
         include:
@@ -170,8 +178,9 @@ jobs:
 
   native-e2e:
     name: Native E2E Tests
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: rust
     steps:
       - name: Checkout repository
@@ -197,8 +206,9 @@ jobs:
 
   windows-integration:
     name: Windows Integration Test
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
+    timeout-minutes: 25
     needs: rust-cross
 
     steps:
@@ -254,8 +264,9 @@ jobs:
 
   global-install:
     name: Global Install (${{ matrix.os }})
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     needs: rust-cross
     strategy:
       matrix:
