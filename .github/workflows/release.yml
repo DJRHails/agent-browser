@@ -80,6 +80,7 @@ jobs:
     needs: check-release
     if: needs.check-release.outputs.should_release == 'true' || needs.check-release.outputs.needs_github_release == 'true'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
