@@ -47,8 +47,11 @@ const packageJson = JSON.parse(
 );
 const version = packageJson.version;
 
-// GitHub release URL
-const GITHUB_REPO = 'vercel-labs/agent-browser';
+// GitHub release URL — use the fork's releases when scoped to @djrhails
+const GITHUB_REPO =
+  packageJson.name === '@djrhails/agent-browser'
+    ? 'DJRHails/agent-browser'
+    : 'vercel-labs/agent-browser';
 const DOWNLOAD_URL = `https://github.com/${GITHUB_REPO}/releases/download/v${version}/${binaryName}`;
 
 async function downloadFile(url, dest) {
