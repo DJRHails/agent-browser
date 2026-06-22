@@ -2,7 +2,7 @@ name: Patch Stack Sync
 
 on:
   schedule:
-    - cron: "0 4 * * *" # nightly at 4am UTC
+    - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC
   workflow_dispatch:
     inputs:
       dry_run:
