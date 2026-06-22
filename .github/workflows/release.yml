@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  schedule:
-    - cron: "0 5 * * 1" # weekly, Monday 05:00 UTC
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
