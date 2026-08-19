@@ -11,11 +11,15 @@ jobs:
   version-sync:
     name: Version Sync Check
     # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
-    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
-    # PRs run arbitrary code and taffy is persistent and shared with 18 other
-    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    # pull_request, so a pull request FROM ANOTHER REPO stays on GitHub-hosted
+    # runners — it runs arbitrary code, and taffy is persistent and shared with
+    # 18 other repos' CI. The test compares repo names rather than reading
+    # `head.repo.fork`: this repo IS itself a fork of its upstream, so that flag
+    # is always true here and would send every job to the billed runner.
+    # Escape hatch: set the CI_FALLBACK repo variable to 'true'.
     runs-on: >-
-      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      ${{ (vars.CI_FALLBACK == 'true' || (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name != github.repository))
       && 'ubuntu-latest'
       || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 10
@@ -34,11 +38,15 @@ jobs:
   rust:
     name: Rust
     # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
-    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
-    # PRs run arbitrary code and taffy is persistent and shared with 18 other
-    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    # pull_request, so a pull request FROM ANOTHER REPO stays on GitHub-hosted
+    # runners — it runs arbitrary code, and taffy is persistent and shared with
+    # 18 other repos' CI. The test compares repo names rather than reading
+    # `head.repo.fork`: this repo IS itself a fork of its upstream, so that flag
+    # is always true here and would send every job to the billed runner.
+    # Escape hatch: set the CI_FALLBACK repo variable to 'true'.
     runs-on: >-
-      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      ${{ (vars.CI_FALLBACK == 'true' || (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name != github.repository))
       && 'ubuntu-latest'
       || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 20
@@ -68,11 +76,15 @@ jobs:
   dashboard:
     name: Dashboard
     # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
-    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
-    # PRs run arbitrary code and taffy is persistent and shared with 18 other
-    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    # pull_request, so a pull request FROM ANOTHER REPO stays on GitHub-hosted
+    # runners — it runs arbitrary code, and taffy is persistent and shared with
+    # 18 other repos' CI. The test compares repo names rather than reading
+    # `head.repo.fork`: this repo IS itself a fork of its upstream, so that flag
+    # is always true here and would send every job to the billed runner.
+    # Escape hatch: set the CI_FALLBACK repo variable to 'true'.
     runs-on: >-
-      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      ${{ (vars.CI_FALLBACK == 'true' || (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name != github.repository))
       && 'ubuntu-latest'
       || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 15
@@ -99,11 +111,15 @@ jobs:
   sandbox-package:
     name: Sandbox Package
     # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
-    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
-    # PRs run arbitrary code and taffy is persistent and shared with 18 other
-    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    # pull_request, so a pull request FROM ANOTHER REPO stays on GitHub-hosted
+    # runners — it runs arbitrary code, and taffy is persistent and shared with
+    # 18 other repos' CI. The test compares repo names rather than reading
+    # `head.repo.fork`: this repo IS itself a fork of its upstream, so that flag
+    # is always true here and would send every job to the billed runner.
+    # Escape hatch: set the CI_FALLBACK repo variable to 'true'.
     runs-on: >-
-      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      ${{ (vars.CI_FALLBACK == 'true' || (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name != github.repository))
       && 'ubuntu-latest'
       || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 15
@@ -129,11 +145,15 @@ jobs:
   eve-package:
     name: Eve Package
     # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
-    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
-    # PRs run arbitrary code and taffy is persistent and shared with 18 other
-    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    # pull_request, so a pull request FROM ANOTHER REPO stays on GitHub-hosted
+    # runners — it runs arbitrary code, and taffy is persistent and shared with
+    # 18 other repos' CI. The test compares repo names rather than reading
+    # `head.repo.fork`: this repo IS itself a fork of its upstream, so that flag
+    # is always true here and would send every job to the billed runner.
+    # Escape hatch: set the CI_FALLBACK repo variable to 'true'.
     runs-on: >-
-      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      ${{ (vars.CI_FALLBACK == 'true' || (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name != github.repository))
       && 'ubuntu-latest'
       || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     steps:
@@ -197,11 +217,15 @@ jobs:
     name: Native E2E Tests
     if: github.event_name == 'workflow_dispatch'
     # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
-    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
-    # PRs run arbitrary code and taffy is persistent and shared with 18 other
-    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    # pull_request, so a pull request FROM ANOTHER REPO stays on GitHub-hosted
+    # runners — it runs arbitrary code, and taffy is persistent and shared with
+    # 18 other repos' CI. The test compares repo names rather than reading
+    # `head.repo.fork`: this repo IS itself a fork of its upstream, so that flag
+    # is always true here and would send every job to the billed runner.
+    # Escape hatch: set the CI_FALLBACK repo variable to 'true'.
     runs-on: >-
-      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      ${{ (vars.CI_FALLBACK == 'true' || (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name != github.repository))
       && 'ubuntu-latest'
       || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 30
