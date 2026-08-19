@@ -10,7 +10,14 @@ on:
 jobs:
   version-sync:
     name: Version Sync Check
-    runs-on: ubuntu-latest
+    # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
+    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
+    # PRs run arbitrary code and taffy is persistent and shared with 18 other
+    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    runs-on: >-
+      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      && 'ubuntu-latest'
+      || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 10
     steps:
       - name: Checkout repository
@@ -26,7 +33,14 @@ jobs:
 
   rust:
     name: Rust
-    runs-on: ubuntu-latest
+    # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
+    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
+    # PRs run arbitrary code and taffy is persistent and shared with 18 other
+    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    runs-on: >-
+      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      && 'ubuntu-latest'
+      || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 20
     steps:
       - name: Checkout repository
@@ -53,7 +67,14 @@ jobs:
 
   dashboard:
     name: Dashboard
-    runs-on: ubuntu-latest
+    # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
+    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
+    # PRs run arbitrary code and taffy is persistent and shared with 18 other
+    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    runs-on: >-
+      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      && 'ubuntu-latest'
+      || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 15
     steps:
       - name: Checkout repository
@@ -77,7 +98,14 @@ jobs:
 
   sandbox-package:
     name: Sandbox Package
-    runs-on: ubuntu-latest
+    # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
+    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
+    # PRs run arbitrary code and taffy is persistent and shared with 18 other
+    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    runs-on: >-
+      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      && 'ubuntu-latest'
+      || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 15
     steps:
       - name: Checkout repository
@@ -100,7 +128,14 @@ jobs:
 
   eve-package:
     name: Eve Package
-    runs-on: ubuntu-latest
+    # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
+    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
+    # PRs run arbitrary code and taffy is persistent and shared with 18 other
+    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    runs-on: >-
+      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      && 'ubuntu-latest'
+      || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -161,7 +196,14 @@ jobs:
   native-e2e:
     name: Native E2E Tests
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    # taffy's self-hosted pool. This repo is PUBLIC and this workflow runs on
+    # pull_request, so a FORK pull request stays on GitHub-hosted runners — fork
+    # PRs run arbitrary code and taffy is persistent and shared with 18 other
+    # repos' CI. Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    runs-on: >-
+      ${{ (github.event.pull_request.head.repo.fork || vars.CI_FALLBACK == 'true')
+      && 'ubuntu-latest'
+      || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 30
     needs: rust
     steps:
