@@ -14,7 +14,13 @@ permissions:
 jobs:
   check-release:
     name: Check for new version
-    runs-on: ubuntu-latest
+    # taffy's self-hosted pool. No fork guard needed: this workflow has no
+    # pull_request trigger, so only pushes to main and manual dispatch reach it.
+    # Escape hatch: set the CI_FALLBACK repo variable to 'true'.
+    runs-on: >-
+      ${{ vars.CI_FALLBACK == 'true'
+      && 'ubuntu-latest'
+      || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 5
     permissions:
       contents: read
@@ -176,7 +182,14 @@ jobs:
     if: >-
       needs.build-binaries.result == 'success' &&
       needs.check-release.outputs.needs_github_release == 'true'
-    runs-on: ubuntu-latest
+    # taffy's self-hosted pool. No fork guard needed: this workflow has no
+    # pull_request trigger. Escape hatch: set the CI_FALLBACK repo variable to
+    # 'true'. (The cross-platform `build-binaries` matrix above stays hosted —
+    # there are no macOS or Windows self-hosted runners.)
+    runs-on: >-
+      ${{ vars.CI_FALLBACK == 'true'
+      && 'ubuntu-latest'
+      || fromJSON('["self-hosted", "linux", "x64", "taffy"]') }}
     timeout-minutes: 10
     permissions:
       contents: write
