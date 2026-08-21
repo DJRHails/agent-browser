@@ -601,7 +601,11 @@ fn keyboard_params(parsed: &Value) -> Value {
         .unwrap_or(0);
     params.insert(
         "windowsVirtualKeyCode".into(),
-        json!(if client_vk != 0 { client_vk } else { derived_vk }),
+        json!(if client_vk != 0 {
+            client_vk
+        } else {
+            derived_vk
+        }),
     );
     params.insert(
         "modifiers".into(),
