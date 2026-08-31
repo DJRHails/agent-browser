@@ -1,8 +1,25 @@
 # agent-browser
 
-## 0.35.1
+## 0.35.2
 
 <!-- release:start -->
+### Security
+
+- Hardened **dashboard origin validation and reverse-proxy access** with same-origin provenance enforcement that defends against DNS rebinding, form/header smuggling, and cross-origin requests. Reverse-proxied origins now require exact HTTPS allowlisting and generated token authentication, while tokenless IPv4 and IPv6 loopback access remains supported. Dashboard options are validated strictly, and CLI and MCP lifecycle behavior is aligned (#1738)
+
+### Bug Fixes
+
+- Fixed **root remote CDP WebSocket URLs with query strings** to insert the required slash before the query while preserving the encoded query (#1735)
+
+### Contributors
+
+- @ctate
+- @Railly
+
+<!-- release:end -->
+
+## 0.35.1
+
 ### Bug Fixes
 
 - Fixed **Windows ARM64 launcher selection** to prefer a native ARM64 executable when present and fall back to the published x64 executable through Windows emulation when it is not (#1725)
@@ -20,7 +37,6 @@
 - @Angelmmiguel
 - @anupamme
 - @nexxusbruno-ship-it
-<!-- release:end -->
 
 ## 0.35.0
 

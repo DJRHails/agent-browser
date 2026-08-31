@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.35.2
+
+<p className="text-[#888] text-sm">August 31, 2026</p>
+
+### Security
+
+- Hardened **dashboard origin validation and reverse-proxy access** with same-origin provenance enforcement that defends against DNS rebinding, form/header smuggling, and cross-origin requests. Reverse-proxied origins now require exact HTTPS allowlisting and generated token authentication, while tokenless IPv4 and IPv6 loopback access remains supported. Dashboard options are validated strictly, and CLI and MCP lifecycle behavior is aligned (#1738)
+
+### Bug Fixes
+
+- Fixed **root remote CDP WebSocket URLs with query strings** to insert the required slash before the query while preserving the encoded query (#1735)
+
+---
+
 ## v0.35.1
 
 <p className="text-[#888] text-sm">August 26, 2026</p>
