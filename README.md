@@ -1006,7 +1006,23 @@ agent-browser open example.com
 agent-browser dashboard stop
 ```
 
-The dashboard runs as a standalone background process on port 4848, independent of browser sessions. It stays available even when no sessions are running, and it works from `http://localhost:4848` or a proxied/forwarded URL that reaches the dashboard server, such as `https://dashboard.agent-browser.localhost` or a Coder workspace URL. The browser stays on the dashboard origin; session-specific tabs, status, and stream traffic are proxied internally, so session ports do not need to be exposed.
+| Option | Description |
+|--------|-------------|
+| `--port <n>` | Dashboard port from 1 to 65535. The default is 4848. |
+| `--allowed-origins <origins>` | Comma-separated exact HTTPS origins allowed to access a reverse-proxied dashboard. Every entry must be valid. Without this option, only loopback origins are accepted. |
+
+The dashboard runs as a standalone background process on port 4848, independent of browser sessions. It stays available even when no sessions are running. Local dashboard origins (`localhost`, `127.0.0.1`, and `[::1]`) work without configuration. If you expose it through a reverse proxy or forwarded URL, explicitly allow the browser origin so the server can reject cross-origin requests and DNS-rebinding attacks:
+
+```bash
+agent-browser dashboard start --allowed-origins https://dashboard.example.com
+# Or: AGENT_BROWSER_DASHBOARD_ALLOWED_ORIGINS=https://dashboard.example.com agent-browser dashboard start
+```
+
+The command prints private access URLs only for the allowed external origins. Open the matching URL once to establish the browser session; it includes an unguessable access token in its fragment. The browser stores it in a Secure, host-bound, same-site cookie for dashboard API and stream requests. Keep these URLs private and configure your reverse proxy to redact cookies from logs. Loopback URLs do not require or receive this token, so open `http://localhost:<port>` directly for local access. The browser stays on the dashboard origin; session-specific tabs, status, and stream traffic are proxied internally, so session ports do not need to be exposed.
+
+Repeated starts with the same settings reuse the running dashboard. To change the port or allowed origins, run `agent-browser dashboard stop` before starting it with the new settings.
+
+Dashboard options are validated strictly. Unknown options, invalid ports, missing values, and malformed allowed origins fail without starting the server.
 
 The dashboard displays:
 - **Live viewport**: real-time JPEG frames from the browser

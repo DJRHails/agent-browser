@@ -1745,8 +1745,15 @@ fn parity_tools() -> Vec<Value> {
         tool(
             TOOL_DASHBOARD_START,
             "Dashboard start",
-            "Start dashboard server.",
-            json!({ "port": { "type": "integer" } }),
+            "Start dashboard server. Loopback access requires no token. When the dashboard is exposed through a reverse proxy, configure its exact browser origin with allowedOrigins and open the returned private URL. Stop a running dashboard before changing its port or allowed origins.",
+            json!({
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "allowedOrigins": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Comma-separated exact HTTPS origins allowed to use a reverse-proxied dashboard. Every entry must be valid. Local loopback origins are allowed by default."
+                }
+            }),
             &[],
         ),
         tool(
@@ -3337,13 +3344,21 @@ fn call_doctor(arguments: &Value) -> Result<Value, ProtocolError> {
     call_cli_tool(arguments, args, None)
 }
 
-fn call_dashboard_start(arguments: &Value) -> Result<Value, ProtocolError> {
+fn dashboard_start_args(arguments: &Value) -> Result<Vec<String>, ProtocolError> {
     let mut args = vec!["dashboard".to_string(), "start".to_string()];
     if let Some(port) = optional_u64(arguments, "port")? {
         args.push("--port".to_string());
         args.push(port.to_string());
     }
-    call_cli_tool(arguments, args, None)
+    if let Some(origins) = optional_string(arguments, "allowedOrigins")? {
+        args.push("--allowed-origins".to_string());
+        args.push(origins);
+    }
+    Ok(args)
+}
+
+fn call_dashboard_start(arguments: &Value) -> Result<Value, ProtocolError> {
+    call_cli_tool(arguments, dashboard_start_args(arguments)?, None)
 }
 
 fn call_install(arguments: &Value) -> Result<Value, ProtocolError> {
@@ -4333,6 +4348,41 @@ mod tests {
             .unwrap();
         // Must stay in sync with the CLI parser's accepted --content values.
         assert_eq!(modes, &vec![json!("all"), json!("text"), json!("none")]);
+    }
+
+    #[test]
+    fn dashboard_start_schema_and_args_include_allowed_origins() {
+        let tool = tools()
+            .into_iter()
+            .find(|tool| tool["name"].as_str() == Some(TOOL_DASHBOARD_START))
+            .unwrap();
+        assert_eq!(
+            tool["inputSchema"]["properties"]["allowedOrigins"]["type"],
+            "string"
+        );
+        assert_eq!(
+            tool["inputSchema"]["properties"]["allowedOrigins"]["minLength"],
+            1
+        );
+        assert_eq!(tool["inputSchema"]["properties"]["port"]["minimum"], 1);
+        assert_eq!(tool["inputSchema"]["properties"]["port"]["maximum"], 65535);
+
+        let args = dashboard_start_args(&json!({
+            "port": 8080,
+            "allowedOrigins": "https://dashboard.example.com"
+        }))
+        .unwrap();
+        assert_eq!(
+            args,
+            vec![
+                "dashboard",
+                "start",
+                "--port",
+                "8080",
+                "--allowed-origins",
+                "https://dashboard.example.com"
+            ]
+        );
     }
 
     #[test]
